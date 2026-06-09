@@ -1,0 +1,10 @@
+<Solution>
+  <Project Path="Client.Windows/Client.Windows.csproj" Id="3008076e-fc90-4216-8edf-71be2daba0c3" />
+  <Project Path="CryptoEngine/CryptoEngine.csproj" />
+  <Project Path="NoxSetup/NoxSetup.vdproj" Type="Installer">
+    <Build />
+  </Project>
+  <Project Path="Server/Server.csproj" Id="bad3f9bd-4580-4ff9-b389-4c7b654989fc" />
+  <Project Path="Shared/Shared.csproj" Id="f5c2ebd7-c267-4430-96cc-6c7f16692379" />
+  <Project Path="Tests/Tests.csproj" />
+</Solution>
