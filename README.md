@@ -15,6 +15,18 @@ It implements a client-server architecture where the server is responsible for u
 
 ### 🔑Key Agreement Algorithm
 The system uses an **X3DH-based** key agreement flow to derive a per-file encryption key, and each file is encrypted client-side before being uploaded to the server. As a result, the server stores only encrypted data and does not possess the private keys or file encryption keys required to decrypt the content. 
+```mermaid
+flowchart LR
+    Alice[Alice Client] -->|1. Get Bob public keys| Server[NOX Server]
+    Server -->|2. Public key bundle| Alice
+    Alice -->|3. E2EE encryption| Ciphertext[Encrypted file]
+    Ciphertext -->|4. Upload| Server
+    Server -->|5. Download| Bob[Bob Client]
+    Bob -->|6. Local decryption| File[File.txt]
+```
+
+### ✅​Trust On First Use, Out-of-Band verification and Man-In-The-Middle Attacks mitigation
+Nox uses a Trust On First Use (TOFU) model combined with out-of-band fingerprint verification to authenticate a recipient’s long-term identity keys. During the first contact, the client displays a fingerprint derived from the recipient’s public identity keys. If this fingerprint is verified through a trusted out-of-band channel, such as an in-person comparison, a phone call, or another authenticated communication method, key-substitution and ***man-in-the-middle attacks*** during the initial exchange are prevented. After the recipient has been trusted, the client stores the verified identity keys and can detect unexpected key changes in future transfers. The security of this mechanism depends on the authenticity of the out-of-band verification channel.
 
 ### 🧱Encrypted Vault and Offline-Attacks mitigation
 User's private keys are locally encrypted in a vault before being sent to the server, this grants multi-device access to the account. 
