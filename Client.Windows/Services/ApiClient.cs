@@ -4,6 +4,7 @@ using Shared.DTO.Auth;
 using Shared.DTO.Transfers;
 using Shared.DTO.X3DH;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -27,7 +28,7 @@ namespace Client.Windows.Services
         private void ConfigureServerUrl(string serverUrl)
         {
             if (string.IsNullOrWhiteSpace(serverUrl))
-                throw new ArgumentException("Server URL is required.", nameof(serverUrl));
+                throw new ArgumentException("L'indirizzo del server è obbligatorio.", nameof(serverUrl));
 
             string normalizedServerUrl = serverUrl.Trim().TrimEnd('/');
 
@@ -68,19 +69,11 @@ namespace Client.Windows.Services
                 request,
                 cancellationToken);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                string error = await response.Content.ReadAsStringAsync(cancellationToken);
-
-                if (string.IsNullOrWhiteSpace(error))
-                    error = $"Login failed with status {(int)response.StatusCode}.";
-
-                throw new InvalidOperationException(error);
-            }
+            await EnsureSuccessAsync(response, ApiOperation.Login, cancellationToken);
 
             LoginResponse loginResponse = await response.Content.ReadFromJsonAsync<LoginResponse>(
                 cancellationToken: cancellationToken)
-                ?? throw new InvalidOperationException("Invalid login response.");
+                ?? throw new InvalidOperationException("La risposta di accesso ricevuta dal server non è valida.");
 
             Jwt = loginResponse.Jwt;
 
@@ -109,15 +102,7 @@ namespace Client.Windows.Services
                 "api/health",
                 cancellationToken);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                string error = await response.Content.ReadAsStringAsync(cancellationToken);
-
-                if (string.IsNullOrWhiteSpace(error))
-                    error = $"Server health check failed with status {(int)response.StatusCode}.";
-
-                throw new InvalidOperationException(error);
-            }
+            await EnsureSuccessAsync(response, ApiOperation.ConnectionCheck, cancellationToken);
         }
 
         public async Task<CurrentUserResponse> GetCurrentUserAsync(
@@ -125,11 +110,12 @@ namespace Client.Windows.Services
         {
             EnsureAuthenticated();
 
-            CurrentUserResponse? response = await _httpClient.GetFromJsonAsync<CurrentUserResponse>(
-                "api/auth/me",
-                cancellationToken);
+            HttpResponseMessage httpResponse = await _httpClient.GetAsync("api/auth/me", cancellationToken);
+            await EnsureSuccessAsync(httpResponse, ApiOperation.CurrentUser, cancellationToken);
+            CurrentUserResponse? response = await httpResponse.Content.ReadFromJsonAsync<CurrentUserResponse>(
+                cancellationToken: cancellationToken);
 
-            return response ?? throw new InvalidOperationException("Invalid current user response.");
+            return response ?? throw new InvalidOperationException("La risposta relativa all'utente non è valida.");
         }
 
         public async Task RegisterAsync(
@@ -144,15 +130,7 @@ namespace Client.Windows.Services
                 request,
                 cancellationToken);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                string error = await response.Content.ReadAsStringAsync(cancellationToken);
-
-                if (string.IsNullOrWhiteSpace(error))
-                    error = $"Registration failed with status {(int)response.StatusCode}.";
-
-                throw new InvalidOperationException(error);
-            }
+            await EnsureSuccessAsync(response, ApiOperation.Registration, cancellationToken);
         }
 
         public async Task<PreKeyStatusResponse> GetPreKeyStatusAsync(
@@ -160,11 +138,12 @@ namespace Client.Windows.Services
         {
             EnsureAuthenticated();
 
-            PreKeyStatusResponse? response = await _httpClient.GetFromJsonAsync<PreKeyStatusResponse>(
-                "api/prekeys/status",
-                cancellationToken);
+            HttpResponseMessage httpResponse = await _httpClient.GetAsync("api/prekeys/status", cancellationToken);
+            await EnsureSuccessAsync(httpResponse, ApiOperation.PreKeyStatus, cancellationToken);
+            PreKeyStatusResponse? response = await httpResponse.Content.ReadFromJsonAsync<PreKeyStatusResponse>(
+                cancellationToken: cancellationToken);
 
-            return response ?? throw new InvalidOperationException("Invalid prekey status response.");
+            return response ?? throw new InvalidOperationException("La risposta sullo stato delle pre-key non è valida.");
         }
 
         public async Task UploadSignedPreKeyAsync(
@@ -178,15 +157,7 @@ namespace Client.Windows.Services
                 request,
                 cancellationToken);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                string error = await response.Content.ReadAsStringAsync(cancellationToken);
-
-                if (string.IsNullOrWhiteSpace(error))
-                    error = $"Signed prekey upload failed with status {(int)response.StatusCode}.";
-
-                throw new InvalidOperationException(error);
-            }
+            await EnsureSuccessAsync(response, ApiOperation.PreKeyUpload, cancellationToken);
         }
 
         public async Task UploadOneTimePreKeysAsync(
@@ -200,15 +171,21 @@ namespace Client.Windows.Services
                 request,
                 cancellationToken);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                string error = await response.Content.ReadAsStringAsync(cancellationToken);
+            await EnsureSuccessAsync(response, ApiOperation.PreKeyUpload, cancellationToken);
+        }
 
-                if (string.IsNullOrWhiteSpace(error))
-                    error = $"One-time prekeys upload failed with status {(int)response.StatusCode}.";
+        public async Task RecoverIdentityBundleAsync(
+            RecoverIdentityBundleRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureAuthenticated();
 
-                throw new InvalidOperationException(error);
-            }
+            HttpResponseMessage response = await _httpClient.PutAsJsonAsync(
+                "api/prekeys/recover-bundle",
+                request,
+                cancellationToken);
+
+            await EnsureSuccessAsync(response, ApiOperation.IdentityRecovery, cancellationToken);
         }
 
         public async Task UpdateVaultAsync(
@@ -222,15 +199,7 @@ namespace Client.Windows.Services
                 request,
                 cancellationToken);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                string error = await response.Content.ReadAsStringAsync(cancellationToken);
-
-                if (string.IsNullOrWhiteSpace(error))
-                    error = $"Vault update failed with status {(int)response.StatusCode}.";
-
-                throw new InvalidOperationException(error);
-            }
+            await EnsureSuccessAsync(response, ApiOperation.VaultUpdate, cancellationToken);
         }
 
         public async Task<PreKeyBundleResponse> GetPreKeyBundleAsync(
@@ -240,7 +209,7 @@ namespace Client.Windows.Services
             EnsureAuthenticated();
 
             if (string.IsNullOrWhiteSpace(username))
-                throw new ArgumentException("Username is required.", nameof(username));
+                throw new ArgumentException("Inserire il nome utente del destinatario.", nameof(username));
 
             string escapedUsername = Uri.EscapeDataString(username.Trim());
 
@@ -248,20 +217,12 @@ namespace Client.Windows.Services
                 $"api/users/{escapedUsername}/prekey-bundle",
                 cancellationToken);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                string error = await response.Content.ReadAsStringAsync(cancellationToken);
-
-                if (string.IsNullOrWhiteSpace(error))
-                    error = $"PreKey bundle request failed with status {(int)response.StatusCode}.";
-
-                throw new InvalidOperationException(error);
-            }
+            await EnsureSuccessAsync(response, ApiOperation.BundleRequest, cancellationToken);
 
             PreKeyBundleResponse? bundle = await response.Content.ReadFromJsonAsync<PreKeyBundleResponse>(
                 cancellationToken: cancellationToken);
 
-            return bundle ?? throw new InvalidOperationException("Invalid prekey bundle response.");
+            return bundle ?? throw new InvalidOperationException("Il bundle di pre-key ricevuto non è valido.");
         }
 
         public async Task<CreateTransferResponse> CreateTransferAsync(
@@ -275,20 +236,12 @@ namespace Client.Windows.Services
                 request,
                 cancellationToken);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                string error = await response.Content.ReadAsStringAsync(cancellationToken);
-
-                if (string.IsNullOrWhiteSpace(error))
-                    error = $"Create transfer failed with status {(int)response.StatusCode}.";
-
-                throw new InvalidOperationException(error);
-            }
+            await EnsureSuccessAsync(response, ApiOperation.TransferCreation, cancellationToken);
 
             CreateTransferResponse? transferResponse = await response.Content.ReadFromJsonAsync<CreateTransferResponse>(
                 cancellationToken: cancellationToken);
 
-            return transferResponse ?? throw new InvalidOperationException("Invalid create transfer response.");
+            return transferResponse ?? throw new InvalidOperationException("La risposta di creazione del trasferimento non è valida.");
         }
 
         public async Task UploadTransferFileContentAsync(
@@ -309,15 +262,7 @@ namespace Client.Windows.Services
                 content,
                 cancellationToken);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                string error = await response.Content.ReadAsStringAsync(cancellationToken);
-
-                if (string.IsNullOrWhiteSpace(error))
-                    error = $"File content upload failed with status {(int)response.StatusCode}.";
-
-                throw new InvalidOperationException(error);
-            }
+            await EnsureSuccessAsync(response, ApiOperation.FileUpload, cancellationToken);
         }
 
         public async Task<List<TransferSummaryResponse>> GetInboxAsync(
@@ -325,9 +270,10 @@ namespace Client.Windows.Services
         {
             EnsureAuthenticated();
 
-            List<TransferSummaryResponse>? response = await _httpClient.GetFromJsonAsync<List<TransferSummaryResponse>>(
-                "api/transfers/inbox",
-                cancellationToken);
+            HttpResponseMessage httpResponse = await _httpClient.GetAsync("api/transfers/inbox", cancellationToken);
+            await EnsureSuccessAsync(httpResponse, ApiOperation.Inbox, cancellationToken);
+            List<TransferSummaryResponse>? response = await httpResponse.Content.ReadFromJsonAsync<List<TransferSummaryResponse>>(
+                cancellationToken: cancellationToken);
 
             return response ?? [];
         }
@@ -338,11 +284,14 @@ namespace Client.Windows.Services
         {
             EnsureAuthenticated();
 
-            TransferDetailResponse? response = await _httpClient.GetFromJsonAsync<TransferDetailResponse>(
+            HttpResponseMessage httpResponse = await _httpClient.GetAsync(
                 $"api/transfers/{transferId}",
                 cancellationToken);
+            await EnsureSuccessAsync(httpResponse, ApiOperation.TransferDetails, cancellationToken);
+            TransferDetailResponse? response = await httpResponse.Content.ReadFromJsonAsync<TransferDetailResponse>(
+                cancellationToken: cancellationToken);
 
-            return response ?? throw new InvalidOperationException("Invalid transfer detail response.");
+            return response ?? throw new InvalidOperationException("I dettagli del trasferimento ricevuti non sono validi.");
         }
 
         public async Task DownloadTransferFileContentToAsync(
@@ -358,15 +307,7 @@ namespace Client.Windows.Services
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                string error = await response.Content.ReadAsStringAsync(cancellationToken);
-
-                if (string.IsNullOrWhiteSpace(error))
-                    error = $"File download failed with status {(int)response.StatusCode}.";
-
-                throw new InvalidOperationException(error);
-            }
+            await EnsureSuccessAsync(response, ApiOperation.FileDownload, cancellationToken);
 
             await using Stream source = await response.Content.ReadAsStreamAsync(cancellationToken);
 
@@ -384,22 +325,108 @@ namespace Client.Windows.Services
                 null,
                 cancellationToken);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                string error = await response.Content.ReadAsStringAsync(cancellationToken);
+            await EnsureSuccessAsync(response, ApiOperation.TransferCompletion, cancellationToken);
+        }
 
-                if (string.IsNullOrWhiteSpace(error))
-                    error = $"Mark transfer downloaded failed with status {(int)response.StatusCode}.";
+        public async Task ReportTransferTamperedAsync(
+            Guid transferId,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureAuthenticated();
 
-                throw new InvalidOperationException(error);
-            }
+            HttpResponseMessage response = await _httpClient.PostAsync(
+                $"api/transfers/{transferId}/tampered",
+                content: null,
+                cancellationToken);
+
+            await EnsureSuccessAsync(response, ApiOperation.TamperingReport, cancellationToken);
         }
 
 
         private void EnsureAuthenticated()
         {
             if (string.IsNullOrWhiteSpace(Jwt))
-                throw new InvalidOperationException("The client is not authenticated.");
+                throw new InvalidOperationException("Il client non è autenticato. Eseguire nuovamente l'accesso.");
+        }
+
+        private static async Task EnsureSuccessAsync(
+            HttpResponseMessage response,
+            ApiOperation operation,
+            CancellationToken cancellationToken)
+        {
+            if (response.IsSuccessStatusCode)
+                return;
+
+            string serverMessage = await response.Content.ReadAsStringAsync(cancellationToken);
+            string message = response.StatusCode switch
+            {
+                HttpStatusCode.BadRequest => TranslateBadRequest(serverMessage),
+                HttpStatusCode.Unauthorized when operation == ApiOperation.Login =>
+                    "Username o password non corretti. Dopo cinque tentativi errati l'account viene bloccato per 10 minuti.",
+                HttpStatusCode.Unauthorized =>
+                    "Sessione scaduta o non valida. Eseguire nuovamente l'accesso.",
+                HttpStatusCode.Forbidden =>
+                    "Non disponi dei permessi necessari per eseguire questa operazione.",
+                HttpStatusCode.NotFound when operation == ApiOperation.BundleRequest =>
+                    "Destinatario non trovato oppure privo delle chiavi necessarie.",
+                HttpStatusCode.NotFound =>
+                    "La risorsa richiesta non è stata trovata.",
+                HttpStatusCode.Conflict when operation == ApiOperation.Registration =>
+                    "Questo nome utente è già utilizzato.",
+                HttpStatusCode.Conflict =>
+                    "L'operazione non può essere completata nello stato attuale.",
+                HttpStatusCode.RequestEntityTooLarge =>
+                    "Il file o la richiesta supera la dimensione consentita dal server.",
+                HttpStatusCode.TooManyRequests =>
+                    "Troppe richieste. Riprova tra 10 minuti.",
+                >= HttpStatusCode.InternalServerError =>
+                    "Il server ha riscontrato un errore. Riprova più tardi.",
+                _ => $"Operazione non riuscita. Codice HTTP {(int)response.StatusCode}."
+            };
+
+            throw new InvalidOperationException(message);
+        }
+
+        private static string TranslateBadRequest(string serverMessage)
+        {
+            if (serverMessage.Contains("Username is required", StringComparison.OrdinalIgnoreCase))
+                return "Il nome utente è obbligatorio.";
+            if (serverMessage.Contains("Password is required", StringComparison.OrdinalIgnoreCase))
+                return "La password è obbligatoria.";
+            if (serverMessage.Contains("at least 12", StringComparison.OrdinalIgnoreCase))
+                return "La password deve contenere almeno 12 caratteri.";
+            if (serverMessage.Contains("uppercase", StringComparison.OrdinalIgnoreCase))
+                return "La password deve contenere almeno una lettera maiuscola.";
+            if (serverMessage.Contains("lowercase", StringComparison.OrdinalIgnoreCase))
+                return "La password deve contenere almeno una lettera minuscola.";
+            if (serverMessage.Contains("number", StringComparison.OrdinalIgnoreCase) ||
+                serverMessage.Contains("digit", StringComparison.OrdinalIgnoreCase))
+                return "La password deve contenere almeno un numero.";
+            if (serverMessage.Contains("special", StringComparison.OrdinalIgnoreCase) ||
+                serverMessage.Contains("non alphanumeric", StringComparison.OrdinalIgnoreCase))
+                return "La password deve contenere almeno un carattere speciale.";
+
+            return "La richiesta inviata al server non è valida.";
+        }
+
+        private enum ApiOperation
+        {
+            Login,
+            Registration,
+            ConnectionCheck,
+            CurrentUser,
+            PreKeyStatus,
+            PreKeyUpload,
+            IdentityRecovery,
+            VaultUpdate,
+            BundleRequest,
+            TransferCreation,
+            FileUpload,
+            Inbox,
+            TransferDetails,
+            FileDownload,
+            TransferCompletion,
+            TamperingReport
         }
     }
 }

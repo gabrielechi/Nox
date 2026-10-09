@@ -8,5 +8,6 @@
         public bool IsUploaded { get; set; }
         public bool IsUsed { get; set; }
         public DateTime CreatedAtUtc { get; set; }
+        public DateTime? RetiredAtUtc { get; set; }
     }
 }

@@ -8,6 +8,8 @@
         public byte[] Ed25519IdentityPublicKey { get; set; } = [];
         public byte[] Ed25519IdentityPrivateKey { get; set; } = [];
         public ClientSignedPreKeyState? SignedPreKey { get; set; }
+        public List<ClientSignedPreKeyState> PreviousSignedPreKeys { get; set; } = [];
+        public int NextSignedPreKeyId { get; set; } = 1;
         public List<ClientOneTimePreKeyState> OneTimePreKeys { get; set; } = [];
         public int NextOneTimePreKeyId { get; set; } = 1;
         public List<TrustedContact> TrustedContacts { get; set; } = [];

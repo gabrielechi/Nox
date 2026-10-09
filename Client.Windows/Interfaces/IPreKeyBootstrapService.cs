@@ -12,5 +12,9 @@ namespace Client.Windows.Interfaces
             ApiClient apiClient,
             UserKeyPayload vault,
             CancellationToken cancellationToken = default);
+
+        void PrepareFreshRecoveryBundle(
+            UserKeyPayload vault,
+            bool preservePreviousDecryptionKeys);
     }
 }

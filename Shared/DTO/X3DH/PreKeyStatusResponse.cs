@@ -8,6 +8,8 @@ namespace Shared.DTO.X3DH
     {
         public bool HasSignedPreKey { get; set; }
         public int? SignedPreKeyId { get; set; }
+        public DateTime? SignedPreKeyCreatedAtUtc { get; set; }
+        public DateTime? SignedPreKeyExpiresAtUtc { get; set; }
         public int AvailableOneTimePreKeys { get; set; }
     }
 }

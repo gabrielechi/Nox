@@ -18,8 +18,10 @@ namespace Server.Controllers
     {
         private const int PublicKeyLength = 32;
         private const int SignatureLength = 64;
+        private const int MinimumEncryptedPayloadLength = 29;
         private const int MinimumOneTimePreKeysPerUpload = 25;
         private const int MaximumOneTimePreKeysPerUpload = 100;
+        private static readonly TimeSpan SignedPreKeyLifetime = TimeSpan.FromHours(48);
 
         private readonly AppDbContext _dbContext;
         private readonly UserManager<ApplicationUser> _userManager;
@@ -59,7 +61,7 @@ namespace Server.Controllers
                 PublicKey = request.PublicKey,
                 Signature = request.Signature,
                 CreatedAtUtc = DateTime.UtcNow,
-                ExpiresAtUtc = DateTime.UtcNow.AddDays(30)
+                ExpiresAtUtc = DateTime.UtcNow.Add(SignedPreKeyLifetime)
             };
 
             _dbContext.SignedPreKeys.Add(signedPreKey);
@@ -67,6 +69,81 @@ namespace Server.Controllers
             await _dbContext.SaveChangesAsync();
 
             return NoContent();
+        }
+
+        [HttpPut("recover-bundle")]
+        public async Task<ActionResult> RecoverIdentityBundle(RecoverIdentityBundleRequest request)
+        {
+            string? validationError = ValidateRecoveryRequest(request);
+
+            if (validationError is not null)
+                return BadRequest(validationError);
+
+            ApplicationUser? user = await GetCurrentUserAsync();
+
+            if (user is null)
+                return Unauthorized();
+
+            bool passwordIsValid = await _userManager.CheckPasswordAsync(user, request.Password);
+
+            if (!passwordIsValid)
+                return Unauthorized("Password confirmation failed.");
+
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync();
+
+            try
+            {
+                List<SignedPreKey> existingSignedPreKeys = await _dbContext.SignedPreKeys
+                    .Where(key => key.UserId == user.Id)
+                    .ToListAsync();
+
+                List<OneTimePreKey> existingOneTimePreKeys = await _dbContext.OneTimePreKeys
+                    .Where(key => key.UserId == user.Id)
+                    .ToListAsync();
+
+                _dbContext.SignedPreKeys.RemoveRange(existingSignedPreKeys);
+                _dbContext.OneTimePreKeys.RemoveRange(existingOneTimePreKeys);
+
+                user.X25519PublicKey = request.X25519IdentityPublicKey;
+                user.Ed25519PublicKey = request.Ed25519IdentityPublicKey;
+                user.EncryptedKeyPayload = request.EncryptedKeyPayload;
+
+                await _dbContext.SaveChangesAsync();
+
+                DateTime now = DateTime.UtcNow;
+
+                _dbContext.SignedPreKeys.Add(new SignedPreKey
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = user.Id,
+                    KeyId = request.SignedPreKeyId,
+                    PublicKey = request.SignedPreKeyPublicKey,
+                    Signature = request.SignedPreKeySignature,
+                    CreatedAtUtc = now,
+                    ExpiresAtUtc = now.Add(SignedPreKeyLifetime)
+                });
+
+                _dbContext.OneTimePreKeys.AddRange(request.OneTimePreKeys.Select(key =>
+                    new OneTimePreKey
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = user.Id,
+                        KeyId = key.KeyId,
+                        PublicKey = key.PublicKey,
+                        CreatedAtUtc = now,
+                        IsClaimed = false
+                    }));
+
+                await _dbContext.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return NoContent();
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
 
         [HttpPost("one-time")]
@@ -138,6 +215,8 @@ namespace Server.Controllers
             {
                 HasSignedPreKey = signedPreKey is not null,
                 SignedPreKeyId = signedPreKey?.KeyId,
+                SignedPreKeyCreatedAtUtc = signedPreKey?.CreatedAtUtc,
+                SignedPreKeyExpiresAtUtc = signedPreKey?.ExpiresAtUtc,
                 AvailableOneTimePreKeys = availableOneTimePreKeys
             };
 
@@ -185,6 +264,50 @@ namespace Server.Controllers
                 if (key.PublicKey.Length != PublicKeyLength)
                     return $"One-time prekey PublicKey must be {PublicKeyLength} bytes.";
             }
+
+            return null;
+        }
+
+        private static string? ValidateRecoveryRequest(RecoverIdentityBundleRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request.Password))
+                return "Password confirmation is required.";
+
+            if (request.EncryptedKeyPayload.Length < MinimumEncryptedPayloadLength)
+                return "EncryptedKeyPayload is too short.";
+
+            if (request.X25519IdentityPublicKey.Length != PublicKeyLength)
+                return $"X25519 identity public key must be {PublicKeyLength} bytes.";
+
+            if (request.Ed25519IdentityPublicKey.Length != PublicKeyLength)
+                return $"Ed25519 identity public key must be {PublicKeyLength} bytes.";
+
+            if (request.SignedPreKeyId < 0)
+                return "SignedPreKey KeyId must be non-negative.";
+
+            if (request.SignedPreKeyPublicKey.Length != PublicKeyLength)
+                return $"SignedPreKey PublicKey must be {PublicKeyLength} bytes.";
+
+            if (request.SignedPreKeySignature.Length != SignatureLength)
+                return $"SignedPreKey Signature must be {SignatureLength} bytes.";
+
+            var oneTimePreKeyRequest = new UploadOneTimePreKeysRequest
+            {
+                Keys = request.OneTimePreKeys
+            };
+
+            string? oneTimePreKeyError = ValidateOneTimePreKeysRequest(oneTimePreKeyRequest);
+
+            if (oneTimePreKeyError is not null)
+                return oneTimePreKeyError;
+
+            int distinctKeyIds = request.OneTimePreKeys
+                .Select(key => key.KeyId)
+                .Distinct()
+                .Count();
+
+            if (distinctKeyIds != request.OneTimePreKeys.Count)
+                return "One-time prekey KeyId values must be unique in the request.";
 
             return null;
         }

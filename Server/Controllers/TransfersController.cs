@@ -27,15 +27,18 @@ namespace Server.Controllers
         private readonly AppDbContext _dbContext;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ITransferStorageService _storageService;
+        private readonly ILogger<TransfersController> _logger;
 
         public TransfersController(
             AppDbContext dbContext,
             UserManager<ApplicationUser> userManager,
-            ITransferStorageService storageService)
+            ITransferStorageService storageService,
+            ILogger<TransfersController> logger)
         {
             _dbContext = dbContext;
             _userManager = userManager;
             _storageService = storageService;
+            _logger = logger;
         }
 
         [HttpPost]
@@ -344,6 +347,48 @@ namespace Server.Controllers
             if (!allFilesUploaded)
                 return Conflict("Transfer is not fully uploaded.");
 
+            await DeleteTransferAsync(transfer, cancellationToken);
+
+            return NoContent();
+        }
+
+        [HttpPost("{transferId:guid}/tampered")]
+        public async Task<ActionResult> ReportTransferAsTampered(
+            Guid transferId,
+            CancellationToken cancellationToken)
+        {
+            ApplicationUser? recipient = await GetCurrentUserAsync();
+
+            if (recipient is null)
+                return Unauthorized();
+
+            FileTransfer? transfer = await _dbContext.FileTransfers
+                .Include(transfer => transfer.Files)
+                .SingleOrDefaultAsync(transfer => transfer.Id == transferId, cancellationToken);
+
+            if (transfer is null)
+                return NotFound("Transfer not found.");
+
+            if (transfer.RecipientId != recipient.Id)
+                return Forbid();
+
+            if (transfer.Status != TransferStatus.Pending)
+                return Conflict("Transfer is not pending.");
+
+            _logger.LogWarning(
+                "Recipient {RecipientId} reported AES-GCM authentication failure for transfer {TransferId}. The transfer will be deleted.",
+                recipient.Id,
+                transfer.Id);
+
+            await DeleteTransferAsync(transfer, cancellationToken);
+
+            return NoContent();
+        }
+
+        private async Task DeleteTransferAsync(
+            FileTransfer transfer,
+            CancellationToken cancellationToken)
+        {
             await _storageService.DeleteTransferDirectoryAsync(
                 transfer.RecipientId,
                 transfer.SenderId,
@@ -353,9 +398,8 @@ namespace Server.Controllers
             _dbContext.FileTransfers.Remove(transfer);
 
             await _dbContext.SaveChangesAsync(cancellationToken);
-
-            return NoContent();
         }
+
         private async Task<ApplicationUser?> GetCurrentUserAsync()
         {
             string? userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier)

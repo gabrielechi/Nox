@@ -9,6 +9,47 @@ installer/
 Zkt/Tests/
 publish
 
+# Local thesis drafts, reviews, and generated figures
+/AlgoritmiEComponenti.md
+/Correzioni1.md
+/Riass1.md
+/TesiRev1.md
+/review1.md
+/GraficoTempoMedioArgon2*
+/NoxSpkVerification.*
+
+# Local implementation reports and rollback material
+/ServerIdentityKeyHardening.md
+/rapportoCambiamenti1.md
+/nox-demo-changes.patch
+
+# Scratch data, rendered documents, and tampering experiments
+/tmp/
+/datatt/
+
+# Local/non-standard development tool manifest
+/Zkt/Server/dotnet-tools.json
+
+# Local thesis and Office exports accidentally placed at repository root
+/*.pdf
+/*.doc
+/*.docx
+/*.odt
+/*.ppt
+/*.pptx
+/*.tex
+/*.aux
+/*.bbl
+/*.blg
+/*.synctex.gz
+
+# Local archives and patch leftovers
+/*.zip
+/*.7z
+/*.rar
+*.orig
+*.rej
+
 # Local API scratch files can contain JWTs, passwords, or bearer tokens.
 *.http
 

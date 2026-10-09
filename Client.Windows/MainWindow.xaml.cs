@@ -69,6 +69,13 @@ namespace Client.Windows
 
         private CheckBox? SendToSelfCheckBoxControl => FindName("SendToSelfCheckBox") as CheckBox;
 
+        private enum OwnIdentityRecoveryAction
+        {
+            Cancel,
+            RestoreVaultIdentity,
+            CreateNewIdentity
+        }
+
         public MainWindow()
         {
             InitializeComponent();
@@ -225,12 +232,30 @@ namespace Client.Windows
                 }
                 catch (Exception ex)
                 {
-                    AuthErrorTextBlock.Text = $"Login succeeded, but vault could not be decrypted: {ex.Message}";
+                    AuthErrorTextBlock.Text = $"Accesso riuscito, ma non è stato possibile decifrare il vault: {GetUserFacingError(ex)}";
                     return;
                 }
 
                 if (_vault is null)
-                    throw new InvalidOperationException("Vault could not be loaded.");
+                    throw new InvalidOperationException("Non è stato possibile caricare il vault crittografico.");
+
+                if (ServerIdentityKeysDifferFromVault(_session, _vault))
+                {
+                    OwnIdentityRecoveryAction recoveryAction = ShowOwnIdentityMismatchWarning(
+                        _session,
+                        _vault);
+
+                    if (recoveryAction == OwnIdentityRecoveryAction.Cancel)
+                    {
+                        _apiClient.ClearAuthentication();
+                        _session = null;
+                        _vault = null;
+                        AuthErrorTextBlock.Text = "Accesso annullato: identità crittografica non verificata.";
+                        return;
+                    }
+
+                    await RecoverOwnIdentityAsync(recoveryAction, password);
+                }
 
                 _sessionPassword = password;
                 await _preKeyBootstrapService.EnsurePreKeysAsync(_apiClient, _vault);
@@ -258,7 +283,7 @@ namespace Client.Windows
             }
             catch (Exception ex)
             {
-                AuthErrorTextBlock.Text = ex.Message;
+                AuthErrorTextBlock.Text = GetUserFacingError(ex);
             }
             finally
             {
@@ -308,7 +333,7 @@ namespace Client.Windows
                     System.Windows.Media.Color.FromRgb(255, 92, 92));
 
                 AuthErrorTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
-                AuthErrorTextBlock.Text = ex.Message;
+                AuthErrorTextBlock.Text = GetUserFacingError(ex);
                 SignInButton.Content = "Connetti";
             }
             finally
@@ -521,7 +546,7 @@ namespace Client.Windows
             catch (Exception ex)
             {
                 AuthErrorTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
-                AuthErrorTextBlock.Text = ex.Message;
+                AuthErrorTextBlock.Text = GetUserFacingError(ex);
             }
             finally
             {
@@ -577,7 +602,6 @@ namespace Client.Windows
                     bundle.Ed25519IdentityPublicKey);
 
                 string formattedFingerprint = _fingerprintService.FormatFingerprint(fingerprint);
-                string shortFingerprint = _fingerprintService.FormatFingerprint(fingerprint, bytesToShow: 8);
 
                 bool hasOneTimePreKey =
                     bundle.OneTimePreKeyId is not null &&
@@ -587,8 +611,7 @@ namespace Client.Windows
 
                 bool trusted = EnsureRecipientTrusted(
                     bundle,
-                    formattedFingerprint,
-                    shortFingerprint);
+                    formattedFingerprint);
 
 
                 if (!trusted)
@@ -619,7 +642,7 @@ namespace Client.Windows
                 }
 
                 if (_sessionPassword is null)
-                    throw new InvalidOperationException("Session password is not available.");
+                    throw new InvalidOperationException("La password della sessione non è disponibile.");
 
                 await SaveVaultAsync(_sessionPassword);
 
@@ -630,7 +653,7 @@ namespace Client.Windows
             catch (Exception ex)
             {
                 RecipientStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
-                RecipientStatusTextBlock.Text = ex.Message;
+                RecipientStatusTextBlock.Text = GetUserFacingError(ex);
             }
             finally
             {
@@ -642,11 +665,10 @@ namespace Client.Windows
 
         private bool EnsureRecipientTrusted(
             PreKeyBundleResponse bundle,
-            string formattedFingerprint,
-            string shortFingerprint)
+            string formattedFingerprint)
         {
             if (_vault is null)
-                throw new InvalidOperationException("Vault is not loaded.");
+                throw new InvalidOperationException("Il vault crittografico non è stato caricato.");
 
             if (IsSendToSelfEnabled() &&
                 _session is not null &&
@@ -680,17 +702,16 @@ namespace Client.Windows
 
             if (existingContact is null)
             {
-                MessageBoxResult result = MessageBox.Show(
-                    $"È la prima volta che contatti '{bundle.Username}'.\n\n" +
-                    $"Short check code:\n{shortFingerprint}\n\n" +
-                    $"Full fingerprint:\n{formattedFingerprint}\n\n" +
-                    "Compara la fingerprint con quella del destinatario su un altro canale di comunicazione\n\n" +
-                    "Ti fidi di questo destinatario?",
-                    "Verifica 'Trust On First Use'",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
+                bool trusted = ShowFingerprintTrustDialog(
+                    windowTitle: "Verifica Trust On First Use",
+                    heading: "Prima verifica del destinatario",
+                    message: $"È la prima volta che contatti '{bundle.Username}'. Verifica che la fingerprint appartenga realmente al destinatario prima di procedere.",
+                    fingerprintLabel: "Fingerprint del destinatario",
+                    formattedFingerprint: formattedFingerprint,
+                    verificationText: "Confronta la fingerprint tramite un canale di comunicazione separato. Ti fidi del destinatario?",
+                    isWarning: false);
 
-                if (result != MessageBoxResult.Yes)
+                if (!trusted)
                     return false;
 
                 _vault.TrustedContacts.Add(new TrustedContact
@@ -716,18 +737,560 @@ namespace Client.Windows
 
             if (!x25519Matches || !ed25519Matches)
             {
-                MessageBox.Show(
-                    $"The identity keys for '{bundle.Username}' changed.\n\n" +
-                    "This may indicate a device reset or a man-in-the-middle attack.\n\n" +
-                    "The transfer has been blocked.",
-                    "Identity key changed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                bool trusted = ShowFingerprintTrustDialog(
+                    windowTitle: "Trasferimento bloccato",
+                    heading: "Il trasferimento è stato bloccato",
+                    message: $"Le chiavi di identità di '{bundle.Username}' sono cambiate. " +
+                             "Questo potrebbe indicare il ripristino di un dispositivo o un attacco man-in-the-middle.",
+                    fingerprintLabel: "Nuova fingerprint rilevata",
+                    formattedFingerprint: formattedFingerprint,
+                    verificationText: "Esegui nuovamente la verifica della fingerprint tramite un canale di comunicazione separato. " +
+                                      "Ti fidi del destinatario?",
+                    isWarning: true);
 
-                return false;
+                if (!trusted)
+                    return false;
+
+                existingContact.X25519IdentityPublicKey = bundle.X25519IdentityPublicKey;
+                existingContact.Ed25519IdentityPublicKey = bundle.Ed25519IdentityPublicKey;
+                existingContact.Fingerprint = formattedFingerprint;
+                existingContact.TrustedAtUtc = DateTime.UtcNow;
+
+                RefreshTrustedRecipientsComboBox();
+                RefreshTrustedContactsList();
+
+                return true;
             }
 
             return true;
+        }
+
+        private bool ShowFingerprintTrustDialog(
+            string windowTitle,
+            string heading,
+            string message,
+            string fingerprintLabel,
+            string formattedFingerprint,
+            string verificationText,
+            bool isWarning)
+        {
+            var dialog = new Window
+            {
+                Title = windowTitle,
+                Owner = this,
+                Width = 720,
+                Height = 520,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false,
+                Background = (System.Windows.Media.Brush)FindResource("AppBackgroundBrush"),
+                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush")
+            };
+            dialog.SourceInitialized += (_, _) => ApplyNativeTitleBarColors(dialog);
+
+            var root = new Grid
+            {
+                Margin = new Thickness(32)
+            };
+
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var title = new TextBlock
+            {
+                Text = heading,
+                FontSize = 26,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = isWarning
+                    ? System.Windows.Media.Brushes.IndianRed
+                    : (System.Windows.Media.Brush)FindResource("PrimaryBrush")
+            };
+
+            var warning = new TextBlock
+            {
+                Text = message,
+                Margin = new Thickness(0, 16, 0, 22),
+                FontSize = 17,
+                LineHeight = 25,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush")
+            };
+
+            var fingerprintLabelTextBlock = new TextBlock
+            {
+                Text = fingerprintLabel,
+                FontSize = 15,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush")
+            };
+
+            var fingerprintBox = new TextBox
+            {
+                Text = formattedFingerprint,
+                Height = 88,
+                Margin = new Thickness(0, 8, 0, 20),
+                Padding = new Thickness(14, 10, 14, 10),
+                FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+                FontSize = 17,
+                IsReadOnly = true,
+                TextWrapping = TextWrapping.Wrap,
+                VerticalContentAlignment = VerticalAlignment.Top,
+                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(17, 24, 39)),
+                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush"),
+                BorderBrush = (System.Windows.Media.Brush)FindResource("BorderBrush")
+            };
+
+            var verification = new TextBlock
+            {
+                Text = verificationText,
+                FontSize = 17,
+                LineHeight = 25,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush")
+            };
+
+            var buttons = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 24, 0, 0)
+            };
+
+            var rejectButton = new Button
+            {
+                Content = "Non mi fido",
+                Width = 140,
+                Height = 44,
+                FontSize = 15,
+                IsCancel = true,
+                Background = System.Windows.Media.Brushes.Transparent,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush"),
+                BorderBrush = (System.Windows.Media.Brush)FindResource("BorderBrush")
+            };
+
+            var trustButton = new Button
+            {
+                Content = "Mi fido",
+                Width = 140,
+                Height = 44,
+                Margin = new Thickness(12, 0, 0, 0),
+                FontSize = 15,
+                Background = (System.Windows.Media.Brush)FindResource("PrimaryBrush"),
+                Foreground = System.Windows.Media.Brushes.White,
+                BorderBrush = (System.Windows.Media.Brush)FindResource("PrimaryBrush")
+            };
+
+            rejectButton.Click += (_, _) => dialog.DialogResult = false;
+            trustButton.Click += (_, _) => dialog.DialogResult = true;
+
+            buttons.Children.Add(rejectButton);
+            buttons.Children.Add(trustButton);
+
+            Grid.SetRow(title, 0);
+            Grid.SetRow(warning, 1);
+            Grid.SetRow(fingerprintLabelTextBlock, 2);
+            Grid.SetRow(fingerprintBox, 3);
+            Grid.SetRow(verification, 4);
+            Grid.SetRow(buttons, 5);
+
+            root.Children.Add(title);
+            root.Children.Add(warning);
+            root.Children.Add(fingerprintLabelTextBlock);
+            root.Children.Add(fingerprintBox);
+            root.Children.Add(verification);
+            root.Children.Add(buttons);
+
+            dialog.Content = root;
+
+            return dialog.ShowDialog() == true;
+        }
+
+        private static bool ServerIdentityKeysDifferFromVault(
+            ClientSession session,
+            UserKeyPayload vault)
+        {
+            return !session.X25519PublicKey.SequenceEqual(vault.X25519IdentityPublicKey) ||
+                   !session.Ed25519PublicKey.SequenceEqual(vault.Ed25519IdentityPublicKey);
+        }
+
+        private OwnIdentityRecoveryAction ShowOwnIdentityMismatchWarning(
+            ClientSession session,
+            UserKeyPayload vault)
+        {
+            string serverFingerprint = _fingerprintService.FormatFingerprint(
+                _fingerprintService.ComputeFingerprint(
+                    session.Username,
+                    session.X25519PublicKey,
+                    session.Ed25519PublicKey));
+
+            string vaultFingerprint = _fingerprintService.FormatFingerprint(
+                _fingerprintService.ComputeFingerprint(
+                    session.Username,
+                    vault.X25519IdentityPublicKey,
+                    vault.Ed25519IdentityPublicKey));
+
+            OwnIdentityRecoveryAction selectedAction = OwnIdentityRecoveryAction.Cancel;
+
+            var dialog = new Window
+            {
+                Title = "Possibile attacco MITM",
+                Owner = this,
+                Width = 790,
+                Height = 620,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false,
+                Background = (System.Windows.Media.Brush)FindResource("AppBackgroundBrush"),
+                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush")
+            };
+            dialog.SourceInitialized += (_, _) => ApplyNativeTitleBarColors(dialog);
+
+            var root = new Grid
+            {
+                Margin = new Thickness(36)
+            };
+
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var title = new TextBlock
+            {
+                Text = "Le tue chiavi pubbliche sono cambiate",
+                FontSize = 27,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = System.Windows.Media.Brushes.IndianRed
+            };
+
+            var message = new TextBlock
+            {
+                Text = "Le chiavi pubbliche associate al tuo account sul server non corrispondono " +
+                       "alle chiavi contenute nel vault cifrato locale. Potrebbe trattarsi di un " +
+                       "attacco man-in-the-middle.",
+                Margin = new Thickness(0, 20, 0, 0),
+                FontSize = 18,
+                LineHeight = 27,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush")
+            };
+
+            var action = new TextBlock
+            {
+                Text = "Puoi ripristinare sul server le chiavi originali conservate nel vault oppure " +
+                       "eliminare la vecchia identità e crearne una nuova. Se scegli una nuova identità, " +
+                       "i tuoi contatti dovranno verificarne nuovamente la fingerprint.",
+                Margin = new Thickness(0, 18, 0, 0),
+                FontSize = 16,
+                FontWeight = FontWeights.SemiBold,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = System.Windows.Media.Brushes.IndianRed
+            };
+
+            var fingerprints = new TextBlock
+            {
+                Text = $"Fingerprint nel vault:\n{vaultFingerprint}\n\n" +
+                       $"Fingerprint pubblicata dal server:\n{serverFingerprint}",
+                Margin = new Thickness(0, 20, 0, 0),
+                Padding = new Thickness(14),
+                FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+                FontSize = 14,
+                LineHeight = 21,
+                TextWrapping = TextWrapping.Wrap,
+                Background = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(18, 23, 34)),
+                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush")
+            };
+
+            var buttons = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 20, 0, 0)
+            };
+
+            var cancelButton = new Button
+            {
+                Content = "Annulla accesso",
+                Width = 150,
+                Height = 44,
+                FontSize = 16,
+                IsCancel = true,
+                Background = System.Windows.Media.Brushes.Transparent,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush"),
+                BorderBrush = (System.Windows.Media.Brush)FindResource("BorderBrush")
+            };
+
+            var createIdentityButton = new Button
+            {
+                Content = "Nuova identità",
+                Width = 150,
+                Height = 44,
+                Margin = new Thickness(12, 0, 0, 0),
+                FontSize = 16,
+                Background = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(185, 56, 56)),
+                Foreground = System.Windows.Media.Brushes.White,
+                BorderBrush = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(185, 56, 56))
+            };
+
+            var restoreButton = new Button
+            {
+                Content = "Ripristina dal vault",
+                Width = 180,
+                Height = 44,
+                Margin = new Thickness(12, 0, 0, 0),
+                FontSize = 16,
+                IsDefault = true,
+                Background = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(34, 197, 94)),
+                Foreground = System.Windows.Media.Brushes.White,
+                BorderBrush = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(34, 197, 94))
+            };
+
+            cancelButton.Click += (_, _) => dialog.Close();
+
+            restoreButton.Click += (_, _) =>
+            {
+                selectedAction = OwnIdentityRecoveryAction.RestoreVaultIdentity;
+                dialog.DialogResult = true;
+            };
+
+            createIdentityButton.Click += (_, _) =>
+            {
+                MessageBoxResult confirmation = MessageBox.Show(
+                    dialog,
+                    "La precedente identità privata verrà eliminata dal vault. " +
+                    "I trasferimenti destinati alle vecchie chiavi potrebbero non essere più decifrabili " +
+                    "e i contatti dovranno verificare la nuova fingerprint. Continuare?",
+                    "Crea nuova identità crittografica",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+
+                if (confirmation != MessageBoxResult.Yes)
+                    return;
+
+                selectedAction = OwnIdentityRecoveryAction.CreateNewIdentity;
+                dialog.DialogResult = true;
+            };
+
+            buttons.Children.Add(cancelButton);
+            buttons.Children.Add(createIdentityButton);
+            buttons.Children.Add(restoreButton);
+
+            Grid.SetRow(title, 0);
+            Grid.SetRow(message, 1);
+            Grid.SetRow(action, 2);
+            Grid.SetRow(fingerprints, 3);
+            Grid.SetRow(buttons, 5);
+
+            root.Children.Add(title);
+            root.Children.Add(message);
+            root.Children.Add(action);
+            root.Children.Add(fingerprints);
+            root.Children.Add(buttons);
+
+            dialog.Content = root;
+            dialog.ShowDialog();
+
+            return selectedAction;
+        }
+
+        private async Task RecoverOwnIdentityAsync(
+            OwnIdentityRecoveryAction recoveryAction,
+            string password)
+        {
+            if (_session is null || _vault is null)
+                throw new InvalidOperationException("La sessione o il vault non sono disponibili per il ripristino dell'identità.");
+
+            bool createNewIdentity = recoveryAction == OwnIdentityRecoveryAction.CreateNewIdentity;
+
+            if (createNewIdentity)
+            {
+                DestroyPrivateIdentityMaterial(_vault);
+
+                var x25519Identity = _keyPairService.GenerateX25519KeyPair();
+                var ed25519Identity = _keyPairService.GenerateEd25519KeyPair();
+
+                _vault.X25519IdentityPublicKey = x25519Identity.PublicKey;
+                _vault.X25519IdentityPrivateKey = x25519Identity.PrivateKey;
+                _vault.Ed25519IdentityPublicKey = ed25519Identity.PublicKey;
+                _vault.Ed25519IdentityPrivateKey = ed25519Identity.PrivateKey;
+            }
+
+            _preKeyBootstrapService.PrepareFreshRecoveryBundle(
+                _vault,
+                preservePreviousDecryptionKeys: !createNewIdentity);
+
+            ClientSignedPreKeyState signedPreKey = _vault.SignedPreKey
+                ?? throw new InvalidOperationException("Non è stato possibile generare una signed pre-key.");
+
+            List<ClientOneTimePreKeyState> activeOneTimePreKeys = _vault.OneTimePreKeys
+                .Where(preKey => !preKey.IsUsed)
+                .ToList();
+
+            byte[] encryptedKeyPayload = _vaultService.EncryptVault(
+                password,
+                _session.PayloadSalt,
+                _vault);
+
+            var request = new RecoverIdentityBundleRequest
+            {
+                Password = password,
+                EncryptedKeyPayload = encryptedKeyPayload,
+                X25519IdentityPublicKey = _vault.X25519IdentityPublicKey,
+                Ed25519IdentityPublicKey = _vault.Ed25519IdentityPublicKey,
+                SignedPreKeyId = signedPreKey.KeyId,
+                SignedPreKeyPublicKey = signedPreKey.PublicKey,
+                SignedPreKeySignature = signedPreKey.Signature,
+                OneTimePreKeys = activeOneTimePreKeys
+                    .Select(preKey => new OneTimePreKeyDto
+                    {
+                        KeyId = preKey.KeyId,
+                        PublicKey = preKey.PublicKey
+                    })
+                    .ToList()
+            };
+
+            await _apiClient.RecoverIdentityBundleAsync(request);
+
+            _session.X25519PublicKey = _vault.X25519IdentityPublicKey;
+            _session.Ed25519PublicKey = _vault.Ed25519IdentityPublicKey;
+            _session.EncryptedKeyPayload = encryptedKeyPayload;
+
+            string operation = createNewIdentity
+                ? "È stata creata e pubblicata una nuova identità crittografica."
+                : "L’identità del vault è stata ripubblicata sul server.";
+
+            MessageBox.Show(
+                this,
+                operation + " Il server contiene ora una nuova SPK e 25 OPK non utilizzate.",
+                "Identità ripristinata",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
+        private static void DestroyPrivateIdentityMaterial(UserKeyPayload vault)
+        {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                vault.X25519IdentityPrivateKey);
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                vault.Ed25519IdentityPrivateKey);
+
+            if (vault.SignedPreKey is not null)
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                    vault.SignedPreKey.PrivateKey);
+            }
+
+            foreach (ClientSignedPreKeyState signedPreKey in vault.PreviousSignedPreKeys)
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                    signedPreKey.PrivateKey);
+            }
+
+            foreach (ClientOneTimePreKeyState oneTimePreKey in vault.OneTimePreKeys)
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                    oneTimePreKey.PrivateKey);
+            }
+        }
+
+        private void ShowDataTamperingWarning(bool removedFromServer)
+        {
+            var dialog = new Window
+            {
+                Title = "Integrità del file compromessa",
+                Owner = this,
+                Width = 660,
+                Height = 390,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false,
+                Background = (System.Windows.Media.Brush)FindResource("AppBackgroundBrush"),
+                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush")
+            };
+            dialog.SourceInitialized += (_, _) => ApplyNativeTitleBarColors(dialog);
+
+            var root = new Grid
+            {
+                Margin = new Thickness(36)
+            };
+
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var title = new TextBlock
+            {
+                Text = "Possibile manomissione rilevata",
+                FontSize = 27,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = System.Windows.Media.Brushes.IndianRed
+            };
+
+            var message = new TextBlock
+            {
+                Text = "La verifica di autenticità AES-GCM non è riuscita. Il contenuto cifrato " +
+                       "potrebbe essere stato modificato durante la permanenza sul server o durante il trasferimento.",
+                Margin = new Thickness(0, 20, 0, 0),
+                FontSize = 18,
+                LineHeight = 27,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush")
+            };
+
+            var action = new TextBlock
+            {
+                Text = removedFromServer
+                    ? "Per la tua sicurezza il file è stato scartato dal dispositivo. " +
+                      "Il server è stato avvisato e ha eliminato definitivamente il trasferimento cifrato."
+                    : "Per la tua sicurezza il file è stato scartato dal dispositivo. " +
+                      "Non è stato possibile confermare l’eliminazione dal server: riprova quando la connessione è disponibile.",
+                Margin = new Thickness(0, 18, 0, 0),
+                FontSize = 19,
+                FontWeight = FontWeights.SemiBold,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = System.Windows.Media.Brushes.IndianRed
+            };
+
+            var closeButton = new Button
+            {
+                Content = "Chiudi",
+                Width = 140,
+                Height = 44,
+                FontSize = 16,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                IsDefault = true,
+                IsCancel = true,
+                Background = (System.Windows.Media.Brush)FindResource("PrimaryBrush"),
+                Foreground = System.Windows.Media.Brushes.White,
+                BorderBrush = (System.Windows.Media.Brush)FindResource("PrimaryBrush")
+            };
+
+            closeButton.Click += (_, _) => dialog.Close();
+
+            Grid.SetRow(title, 0);
+            Grid.SetRow(message, 1);
+            Grid.SetRow(action, 2);
+            Grid.SetRow(closeButton, 3);
+
+            root.Children.Add(title);
+            root.Children.Add(message);
+            root.Children.Add(action);
+            root.Children.Add(closeButton);
+
+            dialog.Content = root;
+            dialog.ShowDialog();
         }
 
         private void SelectFilesButton_Click(object sender, RoutedEventArgs e)
@@ -1110,25 +1673,25 @@ namespace Client.Windows
 
             if (_session is null)
             {
-                SelectedFilesStatusTextBlock.Text = "You must sign in first.";
+                SelectedFilesStatusTextBlock.Text = "Devi prima effettuare l'accesso.";
                 return;
             }
 
             if (_vault is null)
             {
-                SelectedFilesStatusTextBlock.Text = "Vault is not loaded.";
+                SelectedFilesStatusTextBlock.Text = "Il vault crittografico non è stato caricato.";
                 return;
             }
 
             if (_currentRecipientBundle is null)
             {
-                SelectedFilesStatusTextBlock.Text = "Check and trust a recipient first.";
+                SelectedFilesStatusTextBlock.Text = "Controlla e verifica prima il destinatario.";
                 return;
             }
 
             if (_selectedFilePaths.Count == 0)
             {
-                SelectedFilesStatusTextBlock.Text = "Select at least one file.";
+                SelectedFilesStatusTextBlock.Text = "Seleziona almeno un file.";
                 return;
             }
 
@@ -1159,7 +1722,7 @@ namespace Client.Windows
                     string filePath = _selectedFilePaths[fileIndex];
                     var fileInfo = new FileInfo(filePath);
 
-                    SelectedFilesStatusTextBlock.Text = $"Encrypting {fileInfo.Name}...";
+                    SelectedFilesStatusTextBlock.Text = $"Cifratura di {fileInfo.Name}...";
 
                     FileDerivedKeys fileKeys = _fileKeyDerivationService.DeriveFileKeys(
                         x3dhResult.RootKey,
@@ -1236,7 +1799,7 @@ namespace Client.Windows
                     CreateTransferFileResponse serverFile = createTransferResponse.Files
                         .Single(file => file.FileIndex == encryptedFile.FileIndex);
 
-                    SelectedFilesStatusTextBlock.Text = $"Uploading del file {encryptedFile.FileIndex + 1}/{pendingEncryptedFiles.Count}...";
+                    SelectedFilesStatusTextBlock.Text = $"Caricamento file {encryptedFile.FileIndex + 1}/{pendingEncryptedFiles.Count}...";
 
                     await using var encryptedFileStream = new FileStream(
                         encryptedFile.TempEncryptedFilePath,
@@ -1272,7 +1835,7 @@ namespace Client.Windows
             catch (Exception ex)
             {
                 SelectedFilesStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
-                SelectedFilesStatusTextBlock.Text = ex.Message;
+                SelectedFilesStatusTextBlock.Text = GetUserFacingError(ex);
             }
             finally
             {
@@ -1292,7 +1855,7 @@ namespace Client.Windows
         private async Task SaveVaultAsync(string password)
         {
             if (_session is null || _vault is null)
-                throw new InvalidOperationException("Session or vault is not loaded.");
+                throw new InvalidOperationException("La sessione o il vault crittografico non sono disponibili.");
 
             byte[] updatedEncryptedKeyPayload = _vaultService.EncryptVault(
                 password,
@@ -1319,25 +1882,25 @@ namespace Client.Windows
 
             if (_session is null)
             {
-                InboxStatusTextBlock.Text = "You must sign in first.";
+                InboxStatusTextBlock.Text = "Devi prima effettuare l'accesso.";
                 return;
             }
 
             if (_vault is null)
             {
-                InboxStatusTextBlock.Text = "Vault is not loaded.";
+                InboxStatusTextBlock.Text = "Il vault crittografico non è stato caricato.";
                 return;
             }
 
             if (_sessionPassword is null)
             {
-                InboxStatusTextBlock.Text = "Session password is not available.";
+                InboxStatusTextBlock.Text = "La password della sessione non è disponibile.";
                 return;
             }
 
             if (InboxListBox.SelectedIndex < 0 || InboxListBox.SelectedIndex >= _inboxTransfers.Count)
             {
-                InboxStatusTextBlock.Text = "Select a transfer first.";
+                InboxStatusTextBlock.Text = "Seleziona prima un trasferimento.";
                 return;
             }
 
@@ -1367,6 +1930,7 @@ namespace Client.Windows
             }
 
             TransferSummaryResponse selectedTransfer = _inboxTransfers[InboxListBox.SelectedIndex];
+            ClientOneTimePreKeyState? transferOneTimePreKey = null;
 
             try
             {
@@ -1387,11 +1951,12 @@ namespace Client.Windows
                 X3dhMessageHeader x3dhHeader = _x3dhHeaderSerializer.Deserialize(
                     transferDetail.X3dhHeader);
 
-                if (_vault.SignedPreKey is null)
-                    throw new InvalidOperationException("Local signed prekey is missing.");
+                ClientSignedPreKeyState? recipientSignedPreKey = ResolveSignedPreKey(
+                    _vault,
+                    x3dhHeader.RecipientSignedPreKeyId);
 
-                if (_vault.SignedPreKey.KeyId != x3dhHeader.RecipientSignedPreKeyId)
-                    throw new InvalidOperationException("The transfer references a signed prekey that is not available locally.");
+                if (recipientSignedPreKey is null)
+                    throw new InvalidOperationException("Il trasferimento usa una signed pre-key che non è più disponibile nel vault locale.");
 
                 ClientOneTimePreKeyState? oneTimePreKey = null;
 
@@ -1401,44 +1966,63 @@ namespace Client.Windows
                         key.KeyId == x3dhHeader.RecipientOneTimePreKeyId.Value);
 
                     if (oneTimePreKey is null)
-                        throw new InvalidOperationException("The transfer references a one-time prekey that is not available locally.");
+                        throw new InvalidOperationException("Il trasferimento usa una one-time pre-key che non è più disponibile nel vault locale.");
                 }
+
+                transferOneTimePreKey = oneTimePreKey;
 
                 X3dhSecretResult recipientSecret = _x3dhService.CreateRecipientSecret(
                     new X3dhRecipientSecretInput(
                         RecipientUsername: _session.Username,
                         RecipientX25519IdentityPrivateKey: _vault.X25519IdentityPrivateKey,
-                        SignedPreKeyPrivateKey: _vault.SignedPreKey.PrivateKey,
-                        SignedPreKeyId: _vault.SignedPreKey.KeyId,
+                        SignedPreKeyPrivateKey: recipientSignedPreKey.PrivateKey,
+                        SignedPreKeyId: recipientSignedPreKey.KeyId,
                         OneTimePreKeyPrivateKey: oneTimePreKey?.PrivateKey,
                         OneTimePreKeyId: oneTimePreKey?.KeyId,
                         Header: x3dhHeader));
 
-                foreach (TransferFileResponse file in transferDetail.Files.OrderBy(file => file.FileIndex))
+                string stagingDirectory = Path.Combine(
+                    Path.GetTempPath(),
+                    "Nox",
+                    $"download-{Guid.NewGuid():N}");
+
+                Directory.CreateDirectory(stagingDirectory);
+
+                var stagedFiles = new List<(string StagedPath, string OutputPath)>();
+                var reservedOutputPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                try
                 {
-                    InboxStatusTextBlock.Text = $"Scarico {file.FileIndex + 1}/{transferDetail.Files.Count}...";
-
-                    FileDerivedKeys fileKeys = _fileKeyDerivationService.DeriveFileKeys(
-                        recipientSecret.RootKey,
-                        x3dhHeader.TransferContextId,
-                        file.FileIndex);
-
-                    FileMetadata metadata = _fileMetadataProtector.Unprotect(
-                        file.FileHeader,
-                        fileKeys.MetadataKey);
-
-                    string safeFileName = Path.GetFileName(metadata.OriginalFileName);
-                    string outputPath = Path.Combine(outputDirectory, safeFileName);
-
-                    outputPath = GetAvailableFilePath(outputPath);
-
-                    string tempEncryptedFilePath = Path.GetTempFileName();
-
-                    try
+                    foreach (TransferFileResponse file in transferDetail.Files.OrderBy(file => file.FileIndex))
                     {
+                        InboxStatusTextBlock.Text = $"Scarico {file.FileIndex + 1}/{transferDetail.Files.Count}...";
+
+                        FileDerivedKeys fileKeys = _fileKeyDerivationService.DeriveFileKeys(
+                            recipientSecret.RootKey,
+                            x3dhHeader.TransferContextId,
+                            file.FileIndex);
+
+                        FileMetadata metadata = _fileMetadataProtector.Unprotect(
+                            file.FileHeader,
+                            fileKeys.MetadataKey);
+
+                        string safeFileName = Path.GetFileName(metadata.OriginalFileName);
+                        string outputPath = GetAvailableFilePath(
+                            Path.Combine(outputDirectory, safeFileName),
+                            reservedOutputPaths);
+
+                        reservedOutputPaths.Add(outputPath);
+
+                        string tempEncryptedFilePath = Path.Combine(
+                            stagingDirectory,
+                            $"{file.FileId:N}.encrypted");
+                        string tempPlaintextFilePath = Path.Combine(
+                            stagingDirectory,
+                            $"{file.FileId:N}.plaintext");
+
                         await using (var tempEncryptedFileStream = new FileStream(
                             tempEncryptedFilePath,
-                            FileMode.Create,
+                            FileMode.CreateNew,
                             FileAccess.Write,
                             FileShare.None,
                             bufferSize: 1024 * 64,
@@ -1453,34 +2037,49 @@ namespace Client.Windows
                         completedInboxSteps++;
                         UpdateProgress(InboxProgressBar, completedInboxSteps);
 
-                        await using var encryptedStream = new FileStream(
+                        await using (var encryptedStream = new FileStream(
                             tempEncryptedFilePath,
                             FileMode.Open,
                             FileAccess.Read,
                             FileShare.Read,
                             bufferSize: 1024 * 64,
-                            useAsync: true);
+                            useAsync: true))
+                        await using (var plaintextStream = new FileStream(
+                            tempPlaintextFilePath,
+                            FileMode.CreateNew,
+                            FileAccess.Write,
+                            FileShare.None,
+                            bufferSize: 1024 * 64,
+                            useAsync: true))
+                        {
+                            await _fileContentEncryptionService.DecryptAsync(
+                                encryptedStream,
+                                plaintextStream,
+                                fileKeys.FileKey);
+                        }
 
-                        await using var plaintextStream = File.Create(outputPath);
-
-                        await _fileContentEncryptionService.DecryptAsync(
-                            encryptedStream,
-                            plaintextStream,
-                            fileKeys.FileKey);
+                        stagedFiles.Add((tempPlaintextFilePath, outputPath));
 
                         completedInboxSteps++;
                         UpdateProgress(InboxProgressBar, completedInboxSteps);
                     }
-                    finally
+
+                    foreach ((string stagedPath, string outputPath) in stagedFiles)
                     {
-                        if (File.Exists(tempEncryptedFilePath))
-                            File.Delete(tempEncryptedFilePath);
+                        File.Move(stagedPath, outputPath);
                     }
+                }
+                finally
+                {
+                    if (Directory.Exists(stagingDirectory))
+                        Directory.Delete(stagingDirectory, recursive: true);
                 }
 
                 if (oneTimePreKey is not null)
                 {
-                    oneTimePreKey.IsUsed = true;
+                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                        oneTimePreKey.PrivateKey);
+                    _vault.OneTimePreKeys.Remove(oneTimePreKey);
                     await SaveVaultAsync(_sessionPassword);
                 }
 
@@ -1493,16 +2092,58 @@ namespace Client.Windows
 
                 await RefreshInboxAsync();
             }
+            catch (System.Security.Cryptography.AuthenticationTagMismatchException)
+            {
+                bool removedFromServer = false;
+
+                try
+                {
+                    await _apiClient.ReportTransferTamperedAsync(selectedTransfer.TransferId);
+                    removedFromServer = true;
+
+                    if (transferOneTimePreKey is not null)
+                    {
+                        System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                            transferOneTimePreKey.PrivateKey);
+                        _vault.OneTimePreKeys.Remove(transferOneTimePreKey);
+                        await SaveVaultAsync(_sessionPassword);
+                    }
+                }
+                catch
+                {
+                    // The local plaintext is already discarded. The dialog reports that
+                    // server-side deletion could not be confirmed.
+                }
+
+                InboxStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
+                InboxStatusTextBlock.Text = removedFromServer
+                    ? "File manomesso: scartato localmente ed eliminato dal server."
+                    : "File manomesso: scartato localmente; eliminazione server non confermata.";
+                ShowDataTamperingWarning(removedFromServer);
+
+                if (removedFromServer)
+                    await RefreshInboxAsync();
+            }
             catch (Exception ex)
             {
                 InboxStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
-                InboxStatusTextBlock.Text = ex.Message;
+                InboxStatusTextBlock.Text = GetUserFacingError(ex);
             }
             finally
             {
                 SetDownloadButtonEnabled(InboxListBox.SelectedIndex >= 0);
                 DownloadDecryptButton.Content = "Download";
             }
+        }
+
+        private static ClientSignedPreKeyState? ResolveSignedPreKey(
+            UserKeyPayload vault,
+            int keyId)
+        {
+            if (vault.SignedPreKey?.KeyId == keyId)
+                return vault.SignedPreKey;
+
+            return vault.PreviousSignedPreKeys.SingleOrDefault(preKey => preKey.KeyId == keyId);
         }
 
         private async Task RefreshInboxAsync()
@@ -1635,7 +2276,7 @@ namespace Client.Windows
             catch (Exception ex)
             {
                 InboxStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
-                InboxStatusTextBlock.Text = ex.Message;
+                InboxStatusTextBlock.Text = GetUserFacingError(ex);
             }
             finally
             {
@@ -1717,8 +2358,8 @@ namespace Client.Windows
             if (_session is null || _vault is null)
             {
                 MessageBox.Show(
-                    "Identity is not loaded yet.",
-                    "Identity",
+                    "L'identità crittografica non è ancora stata caricata.",
+                    "Identità",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
                 return;
@@ -1991,7 +2632,7 @@ namespace Client.Windows
             if (_vault is null)
             {
                 SidebarDetailStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
-                SidebarDetailStatusTextBlock.Text = "Vault is not loaded.";
+                SidebarDetailStatusTextBlock.Text = "Il vault crittografico non è stato caricato.";
                 return;
             }
 
@@ -2010,7 +2651,7 @@ namespace Client.Windows
             catch (Exception ex)
             {
                 SidebarDetailStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
-                SidebarDetailStatusTextBlock.Text = ex.Message;
+                SidebarDetailStatusTextBlock.Text = GetUserFacingError(ex);
             }
         }
 
@@ -2115,10 +2756,36 @@ namespace Client.Windows
                 contact.Ed25519IdentityPublicKey.SequenceEqual(_vault.Ed25519IdentityPublicKey);
         }
 
-
-        private static string GetAvailableFilePath(string path)
+        private static string GetUserFacingError(Exception exception)
         {
-            if (!File.Exists(path))
+            return exception switch
+            {
+                System.Net.Http.HttpRequestException =>
+                    "Impossibile comunicare con il server. Controlla la connessione e l'indirizzo configurato.",
+                TaskCanceledException =>
+                    "La richiesta ha impiegato troppo tempo ed è stata annullata. Riprova.",
+                UriFormatException =>
+                    "L'indirizzo del server non è valido.",
+                System.Text.Json.JsonException =>
+                    "Il server ha restituito dati in un formato non valido.",
+                IOException =>
+                    "Non è stato possibile leggere o scrivere il file.",
+                System.Security.Cryptography.AuthenticationTagMismatchException =>
+                    "La verifica crittografica dei dati non è riuscita.",
+                InvalidOperationException when !string.IsNullOrWhiteSpace(exception.Message) =>
+                    exception.Message,
+                ArgumentException when !string.IsNullOrWhiteSpace(exception.Message) =>
+                    exception.Message,
+                _ => "Si è verificato un errore imprevisto. Riprova."
+            };
+        }
+
+
+        private static string GetAvailableFilePath(
+            string path,
+            ISet<string>? reservedPaths = null)
+        {
+            if (!File.Exists(path) && reservedPaths?.Contains(path) != true)
                 return path;
 
             string directory = Path.GetDirectoryName(path)
@@ -2135,7 +2802,7 @@ namespace Client.Windows
                     directory,
                     $"{fileNameWithoutExtension} ({counter}){extension}");
 
-                if (!File.Exists(candidate))
+                if (!File.Exists(candidate) && reservedPaths?.Contains(candidate) != true)
                     return candidate;
 
                 counter++;

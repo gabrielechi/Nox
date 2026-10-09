@@ -40,7 +40,7 @@ namespace Client.Windows.Services
                 JsonOptions);
 
             if (payload is null)
-                throw new InvalidOperationException("Invalid encrypted key payload.");
+                throw new InvalidOperationException("Il contenuto del vault cifrato non è valido.");
 
             return payload;
         }

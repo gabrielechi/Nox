@@ -7,5 +7,6 @@
         public byte[] PrivateKey { get; set; } = [];
         public byte[] Signature { get; set; } = [];
         public DateTime CreatedAtUtc { get; set; }
+        public DateTime? RetiredAtUtc { get; set; }
     }
 }
