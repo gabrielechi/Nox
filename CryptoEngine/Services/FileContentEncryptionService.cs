@@ -150,7 +150,7 @@ namespace CryptoEngine.Services
 
             int encryptedChunkLength = BinaryPrimitives.ReadInt32LittleEndian(lengthBytes);
 
-            if (encryptedChunkLength <= 0)
+            if (encryptedChunkLength <= 28 || encryptedChunkLength > ChunkSize + 28)
                 throw new InvalidOperationException("Invalid encrypted chunk length.");
 
             byte[] encryptedChunk = new byte[encryptedChunkLength];

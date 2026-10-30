@@ -30,6 +30,9 @@ namespace Client.Windows.Services
 
             PruneExpiredKeyMaterial(vault);
 
+            if (!ServerAvailableOneTimePreKeysMatchVault(status, vault))
+                throw new PreKeySynchronizationException();
+
             bool signedPreKeyMustRotate =
                 !status.HasSignedPreKey ||
                 vault.SignedPreKey is null ||
@@ -251,6 +254,30 @@ namespace Client.Windows.Services
                 System.Security.Cryptography.CryptographicOperations.ZeroMemory(preKey.PrivateKey);
                 vault.OneTimePreKeys.Remove(preKey);
             }
+        }
+
+        private static bool ServerAvailableOneTimePreKeysMatchVault(
+            PreKeyStatusResponse status,
+            UserKeyPayload vault)
+        {
+            if (status.AvailableOneTimePreKeyDetails.Count != status.AvailableOneTimePreKeys)
+                return false;
+
+            Dictionary<int, ClientOneTimePreKeyState> localKeys = vault.OneTimePreKeys
+                .Where(key => !key.IsUsed)
+                .GroupBy(key => key.KeyId)
+                .ToDictionary(group => group.Key, group => group.Single());
+
+            foreach (OneTimePreKeyDto serverKey in status.AvailableOneTimePreKeyDetails)
+            {
+                if (!localKeys.TryGetValue(serverKey.KeyId, out ClientOneTimePreKeyState? localKey))
+                    return false;
+
+                if (!localKey.PublicKey.SequenceEqual(serverKey.PublicKey))
+                    return false;
+            }
+
+            return true;
         }
     }
 }

@@ -157,6 +157,14 @@
                     </StackPanel>
                 </Border>
             </Grid>
+            <TextBlock Text="v.1.0.2"
+                       Grid.ColumnSpan="2"
+                       HorizontalAlignment="Left"
+                       VerticalAlignment="Bottom"
+                       Margin="16,0,0,12"
+                       FontSize="12"
+                       Foreground="#D8DEE9"
+                       IsHitTestVisible="False" />
         </Grid>
 
         <!-- MAIN DASHBOARD -->
@@ -272,7 +280,7 @@
                             </TabItem.Header>
 
                             <StackPanel Margin="0,18,0,0">
-                                <TextBlock Text="Scegli un destinatario e invia file"
+                                <TextBlock Text="Massimo 20 file per trasferimento"
                                            Margin="0,0,0,18"
                                            TextWrapping="Wrap"
                                            Foreground="{StaticResource TextMutedBrush}" />

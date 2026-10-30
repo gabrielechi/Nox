@@ -208,8 +208,15 @@ namespace Server.Controllers
             SignedPreKey? signedPreKey = await _dbContext.SignedPreKeys
                 .SingleOrDefaultAsync(key => key.UserId == user.Id);
 
-            int availableOneTimePreKeys = await _dbContext.OneTimePreKeys
-                .CountAsync(key => key.UserId == user.Id && !key.IsClaimed);
+            List<OneTimePreKeyDto> availableOneTimePreKeys = await _dbContext.OneTimePreKeys
+                .Where(key => key.UserId == user.Id && !key.IsClaimed)
+                .OrderBy(key => key.KeyId)
+                .Select(key => new OneTimePreKeyDto
+                {
+                    KeyId = key.KeyId,
+                    PublicKey = key.PublicKey
+                })
+                .ToListAsync();
 
             var response = new PreKeyStatusResponse
             {
@@ -217,7 +224,8 @@ namespace Server.Controllers
                 SignedPreKeyId = signedPreKey?.KeyId,
                 SignedPreKeyCreatedAtUtc = signedPreKey?.CreatedAtUtc,
                 SignedPreKeyExpiresAtUtc = signedPreKey?.ExpiresAtUtc,
-                AvailableOneTimePreKeys = availableOneTimePreKeys
+                AvailableOneTimePreKeys = availableOneTimePreKeys.Count,
+                AvailableOneTimePreKeyDetails = availableOneTimePreKeys
             };
 
             return Ok(response);

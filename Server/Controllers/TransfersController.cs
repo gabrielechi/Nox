@@ -11,6 +11,9 @@ using Server.Interfaces;
 using Shared.DTO;
 using Shared.DTO.Transfers;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.Extensions.Options;
+using Server.Options;
 
 namespace Server.Controllers
 {
@@ -22,7 +25,7 @@ namespace Server.Controllers
         private const int MinimumX3dhHeaderLength = 1;
         private const int MinimumFileHeaderLength = 1;
         private const int MaximumFilesPerTransfer = 20;
-        private const long MaximumCiphertextLength = 102L * 1024L * 1024L;
+        private readonly long _maximumCiphertextLength;
 
         private readonly AppDbContext _dbContext;
         private readonly UserManager<ApplicationUser> _userManager;
@@ -33,12 +36,14 @@ namespace Server.Controllers
             AppDbContext dbContext,
             UserManager<ApplicationUser> userManager,
             ITransferStorageService storageService,
-            ILogger<TransfersController> logger)
+            ILogger<TransfersController> logger,
+            IOptions<TransferOptions> transferOptions)
         {
             _dbContext = dbContext;
             _userManager = userManager;
             _storageService = storageService;
             _logger = logger;
+            _maximumCiphertextLength = transferOptions.Value.MaximumCiphertextLength;
         }
 
         [HttpPost]
@@ -123,7 +128,6 @@ namespace Server.Controllers
 
 
         [HttpPost("{transferId:guid}/files/{fileId:guid}/content")]
-        [RequestSizeLimit(MaximumCiphertextLength)]
         public async Task<ActionResult> UploadFileContent(
             Guid transferId,
             Guid fileId,
@@ -159,8 +163,19 @@ namespace Server.Controllers
             if (file.IsUploaded)
                 return Conflict("File content has already been uploaded.");
 
-            if (Request.ContentLength.HasValue && Request.ContentLength.Value != file.CiphertextLength)
+            if (file.CiphertextLength > _maximumCiphertextLength)
+                return StatusCode(StatusCodes.Status413PayloadTooLarge);
+
+            if (!Request.ContentLength.HasValue)
+                return StatusCode(StatusCodes.Status411LengthRequired);
+
+            if (Request.ContentLength.Value != file.CiphertextLength)
                 return BadRequest("Content-Length does not match CiphertextLength.");
+
+            // Raise the body limit only for this authenticated file upload, before reading it.
+            var bodySizeFeature = HttpContext.Features.Get<IHttpMaxRequestBodySizeFeature>();
+            if (bodySizeFeature is not null && !bodySizeFeature.IsReadOnly)
+                bodySizeFeature.MaxRequestBodySize = file.CiphertextLength;
 
             await _storageService.SaveAsync(
                 file.StorageObjectName,
@@ -411,7 +426,7 @@ namespace Server.Controllers
             return await _userManager.FindByIdAsync(userIdValue);
         }
 
-        private static string? ValidateCreateTransferRequest(CreateTransferRequest request)
+        private string? ValidateCreateTransferRequest(CreateTransferRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.RecipientUsername))
                 return "RecipientUsername is required.";
@@ -444,8 +459,8 @@ namespace Server.Controllers
                 if (file.CiphertextLength <= 0)
                     return "CiphertextLength must be greater than zero.";
 
-                if (file.CiphertextLength > MaximumCiphertextLength)
-                    return $"CiphertextLength cannot exceed {MaximumCiphertextLength} bytes.";
+                if (file.CiphertextLength > _maximumCiphertextLength)
+                    return $"CiphertextLength cannot exceed {_maximumCiphertextLength} bytes.";
             }
 
             return null;

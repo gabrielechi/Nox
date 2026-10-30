@@ -11,5 +11,6 @@ namespace Shared.DTO.X3DH
         public DateTime? SignedPreKeyCreatedAtUtc { get; set; }
         public DateTime? SignedPreKeyExpiresAtUtc { get; set; }
         public int AvailableOneTimePreKeys { get; set; }
+        public List<OneTimePreKeyDto> AvailableOneTimePreKeyDetails { get; set; } = [];
     }
 }

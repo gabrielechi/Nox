@@ -16,10 +16,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CryptoEngine\CryptoEngine.csproj" />
+    <ProjectReference Include="..\Server\Server.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Compile Include="..\Client.Windows\Services\FileDownloadService.cs" Link="Client\FileDownloadService.cs" />
   </ItemGroup>
 
 </Project>

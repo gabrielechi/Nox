@@ -257,7 +257,15 @@ namespace Client.Windows.Services
             content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
             content.Headers.ContentLength = ciphertextLength;
 
-            HttpResponseMessage response = await _httpClient.PostAsync(
+            using var uploadClient = new HttpClient
+            {
+                BaseAddress = _httpClient.BaseAddress,
+                Timeout = TimeSpan.FromHours(2)
+            };
+            uploadClient.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", Jwt);
+
+            using HttpResponseMessage response = await uploadClient.PostAsync(
                 $"api/transfers/{transferId}/files/{fileId}/content",
                 content,
                 cancellationToken);
@@ -300,18 +308,31 @@ namespace Client.Windows.Services
             Stream destination,
             CancellationToken cancellationToken = default)
         {
+            await ProcessTransferFileContentAsync(transferId, fileId,
+                (source, token) => source.CopyToAsync(destination, token), cancellationToken);
+        }
+
+        public async Task ProcessTransferFileContentAsync(
+            Guid transferId,
+            Guid fileId,
+            Func<Stream, CancellationToken, Task> processContent,
+            CancellationToken cancellationToken = default)
+        {
             EnsureAuthenticated();
 
-            HttpResponseMessage response = await _httpClient.GetAsync(
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromHours(2));
+
+            using HttpResponseMessage response = await _httpClient.GetAsync(
                 $"api/transfers/{transferId}/files/{fileId}/content",
                 HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken);
+                timeout.Token);
 
-            await EnsureSuccessAsync(response, ApiOperation.FileDownload, cancellationToken);
+            await EnsureSuccessAsync(response, ApiOperation.FileDownload, timeout.Token);
 
-            await using Stream source = await response.Content.ReadAsStreamAsync(cancellationToken);
+            await using Stream source = await response.Content.ReadAsStreamAsync(timeout.Token);
 
-            await source.CopyToAsync(destination, cancellationToken);
+            await processContent(source, timeout.Token);
         }
 
         public async Task MarkTransferDownloadedAsync(

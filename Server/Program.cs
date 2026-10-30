@@ -9,6 +9,7 @@ using Server.Interfaces;
 using System.Threading.RateLimiting;
 using Server.Entities.PreKeys;
 using Microsoft.Data.Sqlite;
+using Server.Options;
 
 namespace Server
 {
@@ -23,6 +24,11 @@ namespace Server
                 options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
             builder.Services.AddControllers();
+            builder.Services.AddOptions<TransferOptions>()
+                .Bind(builder.Configuration.GetSection(TransferOptions.SectionName))
+                .Validate(options => options.MaximumCiphertextLength > 0,
+                    "Transfers:MaximumCiphertextLength must be greater than zero.")
+                .ValidateOnStart();
             builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
             builder.Services.AddSingleton<ITransferStorageService, TransferStorageService>();
             builder.Services.AddHostedService<TransferCleanupService>();
