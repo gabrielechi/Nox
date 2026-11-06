@@ -81,6 +81,16 @@ namespace Server.Controllers
             return Created($"/api/users/{user.Id}", response);
         }
 
+        [EnableRateLimiting("UsernameLookupLimit")]
+        [HttpPost("username-exists")]
+        public async Task<ActionResult<bool>> CheckUsername(UsernameLookupRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request.Username) || request.Username.Trim().Length > 256)
+                return BadRequest("Invalid username.");
+
+            return Ok(await _userManager.FindByNameAsync(request.Username.Trim()) is not null);
+        }
+
         [EnableRateLimiting("LoginRateLimit")]
         [HttpPost("login")]
         public async Task<ActionResult<LoginResponse>> Login(LoginRequest request)

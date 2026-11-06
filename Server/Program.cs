@@ -10,6 +10,8 @@ using System.Threading.RateLimiting;
 using Server.Entities.PreKeys;
 using Microsoft.Data.Sqlite;
 using Server.Options;
+using Server.Logging;
+using Microsoft.Extensions.Logging.Console;
 
 namespace Server
 {
@@ -19,11 +21,15 @@ namespace Server
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            builder.Logging.AddConsole(options => options.FormatterName = CompactConsoleFormatter.FormatterName)
+                .AddConsoleFormatter<CompactConsoleFormatter, ConsoleFormatterOptions>();
+            builder.Logging.AddFilter<ConsoleLoggerProvider>("Microsoft", LogLevel.Warning);
+
             // Services in the container:
             builder.Services.AddDbContext<AppDbContext>(options =>
                 options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-            builder.Services.AddControllers();
+            builder.Services.AddControllers(options => options.Filters.Add<ActivityLogFilter>());
             builder.Services.AddOptions<TransferOptions>()
                 .Bind(builder.Configuration.GetSection(TransferOptions.SectionName))
                 .Validate(options => options.MaximumCiphertextLength > 0,
@@ -71,6 +77,9 @@ namespace Server
                 });
 
                 options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                options.AddPolicy("UsernameLookupLimit", context => RateLimitPartition.GetFixedWindowLimiter(
+                    context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
             });
 
             // --------------- Jwt configuration ------------------
@@ -134,6 +143,9 @@ namespace Server
             app.UseAuthorization();
 
             app.MapControllers();
+
+            app.Lifetime.ApplicationStarted.Register(() =>
+                ServerConsole.ShowBanner(app.Urls, app.Environment.EnvironmentName));
 
             app.Run();
         }

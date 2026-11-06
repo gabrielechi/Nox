@@ -27,20 +27,21 @@ namespace Client.Windows
         private readonly DispatcherTimer _inboxPollingTimer = new();
         private bool _isInboxPollingRefreshRunning;
 
-        private const string DropZoneDisabledText = "Selezionare un destinatario";
-        private const string DropZoneReadyText = "Drag&Drop o Click per selezionare i file";
-        private const string DropZoneSelectedFilesText = "File selezionati";
+        private static string DropZoneDisabledText => Texts.T("SelectARecipient");
+        private static string DropZoneReadyText => Texts.T("DragFilesHereOrClickTo");
+        private static string DropZoneSelectedFilesText => Texts.T("SelectedFiles");
         private const int MaximumFilesPerTransfer = 20;
-        private const string RecipientPlaceholderText = "Immetti destinatario";
-        private const string SendToSelfDisplayText = "me";
-        private const double AuthDesignWidth = 1000;
-        private const double AuthDesignHeight = 650;
-        private const double DashboardDesignWidth = 800;
-        private const double DashboardDesignHeight = 665;
+        private static string RecipientPlaceholderText => Texts.T("SearchForAUser");
+        private static string SendToSelfDisplayText => Texts.T("Me");
+        private static string DirectoryPlaceholder => Texts.T("DefaultFolder");
+        private const double AuthDesignWidth = 432;
+        private const double AuthDesignHeight = 636;
+        private const double DashboardDesignWidth = 744;
+        private const double DashboardDesignHeight = 596;
         private const double WindowScreenPadding = 32;
 
         private readonly ApiClient _apiClient = new();
-        private readonly ClientAppSettingsService _appSettingsService = new();
+        private readonly ClientAppSettingsService _appSettingsService;
         private ClientSession? _session;
 
         private readonly IUserVaultService _vaultService = new UserVaultService(new ArgonKeyDerivationService(), new AesGcmSymmetricService());
@@ -51,11 +52,13 @@ namespace Client.Windows
 
         private PreKeyBundleResponse? _currentRecipientBundle;
         private bool _recipientBundleMustBeRefreshed;
+        private int _recipientCheckVersion;
         private string? _sessionPassword;
         private readonly List<string> _selectedFilePaths = [];
         private UserKeyPayload? _vault;
         private bool _isRefreshingTrustedRecipients;
         private bool _isServerConnectionVerified;
+        private bool? _usernameExists;
         private bool _suppressRememberServerChange = true;
         private bool _isApplyingSendToSelfMode;
         private bool _suppressSendToSelfAutoCheck;
@@ -78,25 +81,48 @@ namespace Client.Windows
             CreateNewIdentity
         }
 
-        public MainWindow()
+        public MainWindow() : this(new ClientAppSettingsService()) { }
+
+        internal MainWindow(ClientAppSettingsService settingsService)
         {
+            _appSettingsService = settingsService;
+            var settings = _appSettingsService.Load();
+            Texts.Apply(settings.Language);
             InitializeComponent();
+            var version = typeof(MainWindow).Assembly.GetName().Version!;
+            ClientVersionLabel.Text = "v." + version.ToString(version.Build > 0 ? 3 : 2);
+            ApplyRecipientPlaceholderIfEmpty();
             SourceInitialized += MainWindow_SourceInitialized;
+            LocationChanged += (_, _) => UpdateWorkspaceLayout();
+            SizeChanged += (_, _) => ArrangeDashboardHeader();
+            DpiChanged += (_, _) => Dispatcher.InvokeAsync(UpdateWorkspaceLayout);
 
             _inboxPollingTimer.Interval = TimeSpan.FromSeconds(30);
             _inboxPollingTimer.Tick += InboxPollingTimer_Tick;
 
             SetSendButtonEnabled(false);
             SetDownloadButtonEnabled(false);
-            LoadClientAppSettings();
+            LoadClientAppSettings(settings);
             _suppressRememberServerChange = false;
             ApplyScaledWindowSize(AuthDesignWidth, AuthDesignHeight);
         }
 
         private void MainWindow_SourceInitialized(object? sender, EventArgs e)
         {
-            ApplyNativeTitleBarColors(this);
+            (PresentationSource.FromVisual(this) as HwndSource)?.AddHook(MonitorConfigurationChanged);
+            UpdateWorkspaceLayout();
         }
+
+        private IntPtr MonitorConfigurationChanged(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (message is 0x007E or 0x001A) // WM_DISPLAYCHANGE, WM_SETTINGCHANGE
+                Dispatcher.InvokeAsync(UpdateWorkspaceLayout);
+            return IntPtr.Zero;
+        }
+
+        private void MinimizeWindow_Click(object sender, RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
+
+        private void CloseWindow_Click(object sender, RoutedEventArgs e) => Close();
 
         private static void ApplyNativeTitleBarColors(Window window)
         {
@@ -147,9 +173,9 @@ namespace Client.Windows
             }
         }
 
-        private void LoadClientAppSettings()
+        private void LoadClientAppSettings(ClientAppSettings settings)
         {
-            ClientAppSettings settings = _appSettingsService.Load();
+            LoginLanguageBox.SelectedValue = DashboardLanguageBox.SelectedValue = Texts.Language;
 
             if (settings.RememberServer && !string.IsNullOrWhiteSpace(settings.RememberedServerUrl))
             {
@@ -161,26 +187,80 @@ namespace Client.Windows
             SetDefaultDownloadDirectoryText(settings.DefaultDownloadDirectory);
         }
 
+        private void Language_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded || sender is not ComboBox box || box.SelectedValue is not string code || code == Texts.Language)
+                return;
+
+            bool placeholder = IsRecipientPlaceholderActive();
+            string directory = GetDefaultDownloadDirectoryFromTextBox();
+            var settings = _appSettingsService.Load();
+            settings.Language = code;
+            try { _appSettingsService.Save(settings); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                box.SelectedValue = Texts.Language;
+                MessageBox.Show(this, Texts.T("CannotSaveLanguage"), "NOX", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            Texts.Apply(code);
+            LoginLanguageBox.SelectedValue = DashboardLanguageBox.SelectedValue = code;
+            if (placeholder) RecipientUsernameTextBox.Text = RecipientPlaceholderText;
+            SetDefaultDownloadDirectoryText(directory);
+            foreach (var label in new[] { AuthErrorTextBlock, ServerStatusLabel, SignedInUserTextBlock, RecipientStatusTextBlock,
+                         DropZonePromptTextBlock, SelectedFilesStatusTextBlock, InboxStatusTextBlock, ContactsStatus })
+            {
+                string next = Texts.Refresh(label.Text);
+                if (next != label.Text) label.Text = next;
+            }
+            foreach (var button in new[] { SignInButton, CreateAccountButton, SendEncryptedButton, RefreshInboxButton, DownloadDecryptButton, CheckRecipientButton })
+                if (button.Content is string old)
+                {
+                    string next = Texts.Refresh(old);
+                    if (next != old) button.Content = next;
+                }
+            UpdateRegistrationHint();
+            int selection = InboxListBox.SelectedIndex;
+            for (int i = 0; i < _inboxTransfers.Count; i++) InboxListBox.Items[i] = FormatInboxTransfer(_inboxTransfers[i]);
+            InboxListBox.SelectedIndex = selection;
+        }
+
+        private double _designWidth;
+        private double _designHeight;
+
         private void ApplyScaledWindowSize(double designWidth, double designHeight)
         {
-            Rect workArea = SystemParameters.WorkArea;
-
-            double availableWidth = Math.Max(1, workArea.Width - WindowScreenPadding);
-            double availableHeight = Math.Max(1, workArea.Height - WindowScreenPadding);
-            double scale = Math.Min(1.0, Math.Min(availableWidth / designWidth, availableHeight / designHeight));
-
-            AppRoot.Width = designWidth;
-            AppRoot.Height = designHeight;
-            AppRoot.LayoutTransform = new System.Windows.Media.ScaleTransform(scale, scale);
-
-            SizeToContent = SizeToContent.WidthAndHeight;
+            if (WindowState != WindowState.Normal) WindowState = WindowState.Normal;
+            _designWidth = designWidth;
+            _designHeight = designHeight;
+            SizeToContent = SizeToContent.Manual;
             ResizeMode = ResizeMode.NoResize;
+            UpdateWorkspaceLayout();
+            Width = Math.Clamp(designWidth, MinWidth, MaxWidth);
+            Height = Math.Clamp(designHeight, MinHeight, MaxHeight);
+            Dispatcher.InvokeAsync(() => Views.WindowLayout.KeepOnMonitor(this), DispatcherPriority.Loaded);
+        }
 
-            Dispatcher.BeginInvoke(new Action(() =>
-            {
-                Left = workArea.Left + (workArea.Width - ActualWidth) / 2;
-                Top = workArea.Top + (workArea.Height - ActualHeight) / 2;
-            }));
+        private void UpdateWorkspaceLayout()
+        {
+            if (_designWidth == 0) return;
+            Size area = Views.WindowLayout.WorkSize(this);
+            double maxWidth = Math.Min(_designWidth, Math.Max(1, area.Width - WindowScreenPadding));
+            double maxHeight = Math.Min(_designHeight, Math.Max(1, area.Height - WindowScreenPadding));
+            MinWidth = maxWidth;
+            MinHeight = maxHeight;
+            MaxWidth = maxWidth;
+            MaxHeight = maxHeight;
+        }
+
+        private void ArrangeDashboardHeader()
+        {
+            if (HeaderActions is null) return;
+            bool compact = ActualWidth < 670;
+            Grid.SetRow(HeaderActions, compact ? 1 : 0);
+            Grid.SetColumn(HeaderActions, compact ? 0 : 1);
+            Grid.SetColumnSpan(HeaderActions, compact ? 2 : 1);
+            HeaderActions.Margin = compact ? new Thickness(0, 6, 0, 0) : new Thickness(0);
         }
 
         private async void SignInButton_Click(object sender, RoutedEventArgs e)
@@ -188,11 +268,9 @@ namespace Client.Windows
             AuthErrorTextBlock.Text = string.Empty;
             AuthErrorTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
 
-            string serverUrl = ServerUrlTextBox.Text.Trim();
-
-            if (string.IsNullOrWhiteSpace(serverUrl))
+            if (!TryGetServerAddress(out string serverUrl))
             {
-                AuthErrorTextBlock.Text = "Server URL mancante.";
+                AuthErrorTextBlock.Text = Texts.T("EnterAValidServerAddressFor");
                 return;
             }
 
@@ -207,20 +285,39 @@ namespace Client.Windows
 
             if (string.IsNullOrWhiteSpace(username))
             {
-                AuthErrorTextBlock.Text = "Username mancante.";
+                AuthErrorTextBlock.Text = Texts.T("UsernameIsRequired");
+                return;
+            }
+
+            if (_usernameExists is null)
+            {
+                SetLoginInputsBusy(true);
+                SignInButton.Content = Texts.T("Checking");
+                try
+                {
+                    await System.Windows.Threading.Dispatcher.Yield(DispatcherPriority.Background);
+                    SetUsernameChoice(await _apiClient.UsernameExistsAsync(username));
+                    PasswordBox.Focus();
+                }
+                catch (Exception ex)
+                {
+                    SignInButton.Content = Texts.T("Continue");
+                    AuthErrorTextBlock.Text = GetUserFacingError(ex);
+                }
+                finally { SetLoginInputsBusy(false); }
                 return;
             }
 
             if (string.IsNullOrWhiteSpace(password))
             {
-                AuthErrorTextBlock.Text = "Password mancante.";
+                AuthErrorTextBlock.Text = Texts.T("PasswordIsRequired");
                 return;
             }
 
             try
             {
-                SignInButton.IsEnabled = false;
-                SignInButton.Content = "Accedo...";
+                SetLoginInputsBusy(true);
+                SignInButton.Content = Texts.T("SigningIn");
 
                 _session = await _apiClient.LoginAsync(serverUrl, username, password);
 
@@ -234,12 +331,12 @@ namespace Client.Windows
                 }
                 catch (Exception ex)
                 {
-                    AuthErrorTextBlock.Text = $"Accesso riuscito, ma non è stato possibile decifrare il vault: {GetUserFacingError(ex)}";
+                    AuthErrorTextBlock.Text = Texts.T("SignedInButTheVaultCould", GetUserFacingError(ex));
                     return;
                 }
 
                 if (_vault is null)
-                    throw new InvalidOperationException("Non è stato possibile caricare il vault crittografico.");
+                    throw new InvalidOperationException(Texts.T("CouldNotLoadTheCryptographicVault"));
 
                 if (ServerIdentityKeysDifferFromVault(_session, _vault))
                 {
@@ -252,7 +349,7 @@ namespace Client.Windows
                         _apiClient.ClearAuthentication();
                         _session = null;
                         _vault = null;
-                        AuthErrorTextBlock.Text = "Accesso annullato: identità crittografica non verificata.";
+                        AuthErrorTextBlock.Text = Texts.T("SignInCancelledCryptographicIdentityNot");
                         return;
                     }
 
@@ -285,7 +382,7 @@ namespace Client.Windows
 
                 CurrentUserResponse currentUser = await _apiClient.GetCurrentUserAsync();
 
-                SignedInUserTextBlock.Text = currentUser.Username;
+                SignedInUserTextBlock.Text = Texts.T("Hello", currentUser.Username);
                 RefreshTrustedRecipientsComboBox();
 
                 AuthScreen.Visibility = Visibility.Collapsed;
@@ -301,64 +398,130 @@ namespace Client.Windows
             }
             finally
             {
-                SignInButton.IsEnabled = true;
-                SignInButton.Content = "Accedi";
+                SetLoginInputsBusy(false);
+                SignInButton.Content = Texts.T("SignIn");
             }
+        }
+
+        private bool TryGetServerAddress(out string address)
+        {
+            address = string.Empty;
+            string host = ServerUrlTextBox.Text.Trim();
+            string scheme = ServerSchemeBox.SelectedIndex == 1 ? "http" : "https";
+            if (host.Length == 0 || host.Contains("://") ||
+                !Uri.TryCreate($"{scheme}://{host}", UriKind.Absolute, out var uri) ||
+                uri.Host.Length == 0 || uri.UserInfo.Length != 0 || uri.Query.Length != 0 || uri.Fragment.Length != 0)
+                return false;
+            address = uri.AbsoluteUri.TrimEnd('/');
+            return true;
+        }
+
+        private void SetLoginInputsBusy(bool busy)
+        {
+            SignInButton.IsEnabled = ServerSchemeBox.IsEnabled = !busy;
+            ServerUrlTextBox.IsReadOnly = UsernameTextBox.IsReadOnly = busy;
+            PasswordBox.IsEnabled = !busy && _usernameExists.HasValue;
+            UpdateRegistrationHint();
+        }
+
+        private void SetUsernameChoice(bool? exists)
+        {
+            _usernameExists = exists;
+            PasswordBox.Clear();
+            PasswordLabelTextBlock.Visibility = PasswordBox.Visibility = exists.HasValue ? Visibility.Visible : Visibility.Collapsed;
+            PasswordBox.IsEnabled = exists.HasValue;
+            SignInButton.Visibility = exists == false ? Visibility.Collapsed : Visibility.Visible;
+            CreateAccountButton.Visibility = exists == false ? Visibility.Visible : Visibility.Collapsed;
+            SignInButton.IsDefault = _isServerConnectionVerified && exists != false;
+            SignInButton.Content = !_isServerConnectionVerified ? Texts.T("Connect") : exists == true ? Texts.T("SignIn") : Texts.T("Continue");
+            UpdateRegistrationHint();
+        }
+
+        private void RegistrationPassword_Changed(object sender, RoutedEventArgs e) => UpdateRegistrationHint();
+
+        private void UpdateRegistrationHint()
+        {
+            if (RegistrationPasswordHint is null || CreateAccountButton is null) return;
+            if (_usernameExists != false)
+            {
+                RegistrationPasswordHint.Visibility = Visibility.Collapsed;
+                RegistrationPasswordHint.Text = string.Empty;
+                CreateAccountButton.IsEnabled = false;
+                return;
+            }
+
+            string missing = MissingPasswordRequirements(PasswordBox.Password);
+            bool valid = missing.Length == 0;
+            RegistrationPasswordHint.Text = valid ? Texts.T("PasswordMeetsTheRequirements") : Texts.T("StillNeeded", missing);
+            RegistrationPasswordHint.Foreground = valid ? System.Windows.Media.Brushes.LightGreen
+                : (System.Windows.Media.Brush)FindResource("TextMutedBrush");
+            RegistrationPasswordHint.Visibility = Visibility.Visible;
+            CreateAccountButton.IsEnabled = valid && ServerSchemeBox.IsEnabled;
+        }
+
+        private static string MissingPasswordRequirements(string password)
+        {
+            List<string> missing = [];
+            int remaining = 12 - password.Length;
+            if (remaining > 0)
+                missing.Add(remaining == 1 ? Texts.T("1MoreCharacterToReach12") : Texts.T("MoreCharactersToReach12", remaining));
+            if (!password.Any(char.IsAsciiLetterUpper)) missing.Add(Texts.T("AnUppercaseLetterAZ"));
+            if (!password.Any(char.IsAsciiLetterLower)) missing.Add(Texts.T("ALowercaseLetterAZ"));
+            if (!password.Any(char.IsAsciiDigit)) missing.Add(Texts.T("ADigit09"));
+            if (!password.Any(ch => !char.IsLetterOrDigit(ch))) missing.Add(Texts.T("ASpecialCharacter"));
+            return string.Join(", ", missing);
         }
 
         private async Task CheckServerConnectionAsync(string serverUrl)
         {
+            SetLoginInputsBusy(true);
+            SignInButton.Content = Texts.T("Connecting");
             try
             {
-                SignInButton.IsEnabled = false;
-                SignInButton.Content = "Checking...";
-
                 await _apiClient.CheckHealthAsync(serverUrl);
-
+                SaveRememberedServerIfRequested(serverUrl);
                 _isServerConnectionVerified = true;
                 UsernameTextBox.IsEnabled = true;
-                PasswordBox.IsEnabled = true;
-                UsernameLabelTextBlock.Visibility = Visibility.Visible;
-                UsernameTextBox.Visibility = Visibility.Visible;
-                PasswordLabelTextBlock.Visibility = Visibility.Visible;
-                PasswordBox.Visibility = Visibility.Visible;
-                CreateAccountButton.Visibility = Visibility.Visible;
-                ServerOnlineIndicator.Visibility = Visibility.Visible;
-                ServerOnlineIndicator.Fill = new System.Windows.Media.SolidColorBrush(
-                    System.Windows.Media.Color.FromRgb(64, 217, 119));
-                SaveRememberedServerIfRequested(serverUrl);
-
-                AuthErrorTextBlock.Foreground = System.Windows.Media.Brushes.LightGreen;
-                AuthErrorTextBlock.Text = "Connessione al server riuscita.";
-                SignInButton.Content = "Accedi";
+                UsernameLabelTextBlock.Visibility = UsernameTextBox.Visibility = Visibility.Visible;
+                SetUsernameChoice(null);
+                ServerStatusLabel.Text = Texts.T("Connected");
+                ServerOnlineIndicator.Fill = System.Windows.Media.Brushes.LightGreen;
+                AuthErrorTextBlock.Text = ServerSchemeBox.SelectedIndex == 1
+                    ? Texts.T("HTTPDoesNotEncryptCredentialsIn") : string.Empty;
+                UsernameTextBox.Focus();
             }
             catch (Exception ex)
             {
-                _isServerConnectionVerified = false;
-                UsernameTextBox.IsEnabled = false;
-                PasswordBox.IsEnabled = false;
-                UsernameLabelTextBlock.Visibility = Visibility.Collapsed;
-                UsernameTextBox.Visibility = Visibility.Collapsed;
-                PasswordLabelTextBlock.Visibility = Visibility.Collapsed;
-                PasswordBox.Visibility = Visibility.Collapsed;
-                CreateAccountButton.Visibility = Visibility.Collapsed;
-                ServerOnlineIndicator.Visibility = Visibility.Visible;
-                ServerOnlineIndicator.Fill = new System.Windows.Media.SolidColorBrush(
-                    System.Windows.Media.Color.FromRgb(255, 92, 92));
-
+                ResetServerConnectionState();
                 AuthErrorTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
                 AuthErrorTextBlock.Text = GetUserFacingError(ex);
-                SignInButton.Content = "Connetti";
             }
-            finally
-            {
-                SignInButton.IsEnabled = true;
-            }
+            finally { SetLoginInputsBusy(false); }
         }
+
+        private void ServerScheme_Changed(object sender, SelectionChangedEventArgs e) => ResetServerConnectionState();
 
         private void ServerUrlTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
+            // Accept full URLs from the clipboard and previously saved preferences.
+            var field = (TextBox)sender;
+            string text = field.Text.Trim();
+            int prefix = text.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ? 8 :
+                text.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ? 7 : 0;
+            if (prefix != 0 && ServerSchemeBox != null)
+            {
+                ServerSchemeBox.SelectedIndex = prefix == 7 ? 1 : 0;
+                field.Text = text[prefix..];
+                field.CaretIndex = field.Text.Length;
+            }
             ResetServerConnectionState();
+        }
+
+        private void UsernameTextBox_Changed(object sender, TextChangedEventArgs e)
+        {
+            if (!_isServerConnectionVerified) return;
+            SetUsernameChoice(null);
+            AuthErrorTextBlock.Text = string.Empty;
         }
 
         private void RememberServerCheckBox_Unchecked(object sender, RoutedEventArgs e)
@@ -398,7 +561,7 @@ namespace Client.Windows
         {
             var folderDialog = new OpenFolderDialog
             {
-                Title = "Scegli la default directory"
+                Title = Texts.T("ChooseTheDefaultFolder")
             };
 
             string currentDirectory = GetDefaultDownloadDirectoryFromTextBox();
@@ -422,7 +585,7 @@ namespace Client.Windows
         {
             if (string.IsNullOrWhiteSpace(directory))
             {
-                DefaultDownloadDirectoryTextBox.Text = "default directory";
+                DefaultDownloadDirectoryTextBox.Text = DirectoryPlaceholder;
                 DefaultDownloadDirectoryTextBox.Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush");
                 return;
             }
@@ -435,7 +598,7 @@ namespace Client.Windows
         {
             string directory = DefaultDownloadDirectoryTextBox.Text.Trim();
 
-            return string.Equals(directory, "default directory", StringComparison.Ordinal)
+            return string.Equals(directory, DirectoryPlaceholder, StringComparison.Ordinal)
                 ? string.Empty
                 : directory;
         }
@@ -454,73 +617,56 @@ namespace Client.Windows
                 return;
 
             UsernameTextBox.IsEnabled = false;
-            PasswordBox.IsEnabled = false;
             UsernameLabelTextBlock.Visibility = Visibility.Collapsed;
             UsernameTextBox.Visibility = Visibility.Collapsed;
-            PasswordLabelTextBlock.Visibility = Visibility.Collapsed;
-            PasswordBox.Visibility = Visibility.Collapsed;
-            CreateAccountButton.Visibility = Visibility.Collapsed;
+            SetUsernameChoice(null);
+            _apiClient.ClearAuthentication();
+            ServerStatusLabel.Text = Texts.T("NotConnected");
+            AuthErrorTextBlock.Text = string.Empty;
             ServerOnlineIndicator.Visibility = Visibility.Visible;
             ServerOnlineIndicator.Fill = new System.Windows.Media.SolidColorBrush(
                 System.Windows.Media.Color.FromRgb(255, 92, 92));
-            SignInButton.Content = "Connetti";
+            SignInButton.Content = Texts.T("Connect");
         }
 
         private async void CreateAccountButton_Click(object sender, RoutedEventArgs e)
         {
             AuthErrorTextBlock.Text = string.Empty;
 
-            string serverUrl = ServerUrlTextBox.Text.Trim();
+            if (!TryGetServerAddress(out string serverUrl) || _usernameExists != false)
+                return;
             string username = UsernameTextBox.Text.Trim();
             string password = PasswordBox.Password;
 
             if (!_isServerConnectionVerified)
             {
-                AuthErrorTextBlock.Text = "Verifica prima la connessione al server.";
+                AuthErrorTextBlock.Text = Texts.T("CheckTheServerConnectionFirst");
                 return;
             }
 
             if (string.IsNullOrWhiteSpace(serverUrl))
             {
-                AuthErrorTextBlock.Text = "Server URL mancante";
+                AuthErrorTextBlock.Text = Texts.T("ServerAddressIsRequired");
                 return;
             }
 
             if (string.IsNullOrWhiteSpace(username))
             {
-                AuthErrorTextBlock.Text = "Inserire Username";
+                AuthErrorTextBlock.Text = Texts.T("EnterAUsername");
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(password))
+            if (MissingPasswordRequirements(password).Length != 0)
             {
-                AuthErrorTextBlock.Text = "Inserire Password";
-                return;
-            }
-
-            if (password.Length < 12)
-            {
-                AuthErrorTextBlock.Text = "La password deve avere minimo 12 caratteri";
-                return;
-            }
-
-            if (!password.Any(char.IsDigit))
-            {
-                AuthErrorTextBlock.Text = "La password deve contenere almeno un numero";
-                return;
-            }
-
-            if (!password.Any(ch => !char.IsLetterOrDigit(ch)))
-            {
-                AuthErrorTextBlock.Text = "La password deve contenere almeno un carattere speciale";
+                UpdateRegistrationHint();
                 return;
             }
 
             try
             {
-                CreateAccountButton.IsEnabled = false;
-                SignInButton.IsEnabled = false;
-                CreateAccountButton.Content = "Registrazione..";
+                SetLoginInputsBusy(true);
+                CreateAccountButton.Content = Texts.T("Registering");
+                await System.Windows.Threading.Dispatcher.Yield(DispatcherPriority.Background);
 
                 var x25519Identity = _keyPairService.GenerateX25519KeyPair();
                 var ed25519Identity = _keyPairService.GenerateEd25519KeyPair();
@@ -555,7 +701,9 @@ namespace Client.Windows
                 await _apiClient.RegisterAsync(serverUrl, request);
 
                 AuthErrorTextBlock.Foreground = System.Windows.Media.Brushes.LightGreen;
-                AuthErrorTextBlock.Text = "Account creato. Puoi eseguire il login";
+                SetUsernameChoice(null);
+                AuthErrorTextBlock.Text = Texts.T("AccountCreatedSelectContinueToSign");
+                UsernameTextBox.Focus();
             }
             catch (Exception ex)
             {
@@ -564,16 +712,25 @@ namespace Client.Windows
             }
             finally
             {
-                CreateAccountButton.IsEnabled = true;
-                SignInButton.IsEnabled = true;
-                CreateAccountButton.Content = "Crea Account";
+                SetLoginInputsBusy(false);
+                CreateAccountButton.Content = Texts.T("Register");
             }
+        }
+
+        private void RecipientUsername_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key != System.Windows.Input.Key.Enter) return;
+            e.Handled = true;
+            if (!e.IsRepeat && CheckRecipientButton.IsEnabled && !TrustedRecipientsComboBox.IsDropDownOpen)
+                CheckRecipientButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         }
 
         private async void CheckRecipientButton_Click(object sender, RoutedEventArgs e)
         {
+            int checkVersion = ++_recipientCheckVersion;
+            _currentRecipientBundle = null;
+            _recipientBundleMustBeRefreshed = false;
             RecipientStatusTextBlock.Text = string.Empty;
-            RecipientFingerprintTextBlock.Text = string.Empty;
 
             DropZoneBorder.IsEnabled = false;
             SetSendButtonEnabled(false);
@@ -586,7 +743,7 @@ namespace Client.Windows
 
             if (_session is null || _vault is null)
             {
-                RecipientStatusTextBlock.Text = "Devi effettuare il login prima di contattare un destinatario.";
+                RecipientStatusTextBlock.Text = Texts.T("SignInBeforeContactingARecipient");
                 return;
             }
 
@@ -594,7 +751,7 @@ namespace Client.Windows
 
             if (string.IsNullOrWhiteSpace(recipientUsername))
             {
-                RecipientStatusTextBlock.Text = "L'username del destinatario è necessario.";
+                RecipientStatusTextBlock.Text = Texts.T("EnterTheRecipientSUsername");
                 return;
             }
 
@@ -604,12 +761,12 @@ namespace Client.Windows
                 recipientUsername = GetRecipientUsername();
 
                 CheckRecipientButton.IsEnabled = false;
-                CheckRecipientButton.Content = "Checking...";
+                CheckRecipientButton.Content = Texts.T("CheckingAlt");
 
                 PreKeyBundleResponse bundle = await _apiClient.GetPreKeyBundleAsync(recipientUsername);
-
-                _currentRecipientBundle = bundle;
-                _recipientBundleMustBeRefreshed = false;
+                if (checkVersion != _recipientCheckVersion ||
+                    !string.Equals(GetRecipientUsername(), recipientUsername, StringComparison.OrdinalIgnoreCase))
+                    return;
 
                 byte[] fingerprint = _fingerprintService.ComputeFingerprint(
                     bundle.Username,
@@ -632,7 +789,7 @@ namespace Client.Windows
                 if (!trusted)
                 {
                     RecipientStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
-                    RecipientStatusTextBlock.Text = "Rifiuto del destinatario, trasferimento bloccato.";
+                    RecipientStatusTextBlock.Text = Texts.T("RecipientNotTrustedTransferBlocked");
                     _currentRecipientBundle = null;
                     _recipientBundleMustBeRefreshed = false;
                     return;
@@ -642,27 +799,30 @@ namespace Client.Windows
 
                 if (IsCurrentUserBundle(bundle))
                 {
-                    RecipientStatusTextBlock.Text = "Fingerprint";
+                    RecipientStatusTextBlock.Text = Texts.T("YourAccountIsReadyToReceive");
                 }
                 else if (wasAlreadyTrusted)
                 {
                     RecipientStatusTextBlock.Text = hasOneTimePreKey
-                        ? $"Utente '{bundle.Username}' disponibile"
-                        : $"Utente '{bundle.Username}' pronto, ma non ci sono OPKs disponibili | X3DH fallback attivato";
+                        ? Texts.T("UserIsAvailable", bundle.Username)
+                        : Texts.T("UserIsReadyButNoOne", bundle.Username);
                 }
                 else
                 {
                     RecipientStatusTextBlock.Text = hasOneTimePreKey
-                        ? $"Utente '{bundle.Username}' verificato e aggiunto ai contatti"
-                        : $"Utente '{bundle.Username}' verificato, ma non ci sono OPKs disponibili | X3DH fallback attivato";
+                        ? Texts.T("UserVerifiedAndAddedToYour", bundle.Username)
+                        : Texts.T("UserVerifiedButNoOneTime", bundle.Username);
                 }
 
                 if (_sessionPassword is null)
-                    throw new InvalidOperationException("La password della sessione non è disponibile.");
+                    throw new InvalidOperationException(Texts.T("TheSessionPasswordIsUnavailable"));
 
                 await SaveVaultAsync(_sessionPassword);
 
-                RecipientFingerprintTextBlock.Text = formattedFingerprint;
+                if (checkVersion != _recipientCheckVersion ||
+                    !string.Equals(GetRecipientUsername(), bundle.Username, StringComparison.OrdinalIgnoreCase))
+                    return;
+                _currentRecipientBundle = bundle;
                 DropZoneBorder.IsEnabled = true;
                 DropZonePromptTextBlock.Text = DropZoneReadyText;
             }
@@ -674,7 +834,7 @@ namespace Client.Windows
             finally
             {
                 CheckRecipientButton.IsEnabled = true;
-                CheckRecipientButton.Content = "Check";
+                CheckRecipientButton.Content = Texts.T("Check");
             }
         }
 
@@ -684,7 +844,7 @@ namespace Client.Windows
             string formattedFingerprint)
         {
             if (_vault is null)
-                throw new InvalidOperationException("Il vault crittografico non è stato caricato.");
+                throw new InvalidOperationException(Texts.T("TheCryptographicVaultHasNotBeen"));
 
             if (IsSendToSelfEnabled() &&
                 _session is not null &&
@@ -719,12 +879,12 @@ namespace Client.Windows
             if (existingContact is null)
             {
                 bool trusted = ShowFingerprintTrustDialog(
-                    windowTitle: "Verifica Trust On First Use",
-                    heading: "Prima verifica del destinatario",
-                    message: $"È la prima volta che contatti '{bundle.Username}'. Verifica che la fingerprint appartenga realmente al destinatario prima di procedere.",
-                    fingerprintLabel: "Fingerprint del destinatario",
+                    windowTitle: Texts.T("TrustOnFirstUse"),
+                    heading: Texts.T("VerifyRecipient"),
+                    message: Texts.T("ThisIsTheFirstTimeYou", bundle.Username),
+                    fingerprintLabel: Texts.T("RecipientFingerprint"),
                     formattedFingerprint: formattedFingerprint,
-                    verificationText: "Confronta la fingerprint tramite un canale di comunicazione separato e chiedi al destinatario i quattro caratteri finali nascosti.",
+                    verificationText: Texts.T("CompareTheFingerprintWithTheRecipient"),
                     isWarning: false);
 
                 if (!trusted)
@@ -754,14 +914,12 @@ namespace Client.Windows
             if (!x25519Matches || !ed25519Matches)
             {
                 bool trusted = ShowFingerprintTrustDialog(
-                    windowTitle: "Trasferimento bloccato",
-                    heading: "Il trasferimento è stato bloccato",
-                    message: $"Le chiavi di identità di '{bundle.Username}' sono cambiate. " +
-                             "Questo potrebbe indicare il ripristino di un dispositivo o un attacco man-in-the-middle.",
-                    fingerprintLabel: "Nuova fingerprint rilevata",
+                    windowTitle: Texts.T("TransferBlocked"),
+                    heading: Texts.T("TheTransferHasBeenBlocked"),
+                    message: Texts.T("RecipientKeysChanged", bundle.Username),
+                    fingerprintLabel: Texts.T("NewFingerprintDetected"),
                     formattedFingerprint: formattedFingerprint,
-                    verificationText: "Esegui nuovamente la verifica della fingerprint tramite un canale di comunicazione separato. " +
-                                      "Chiedi al destinatario i quattro caratteri finali nascosti.",
+                    verificationText: Texts.T("VerifyTheNewFingerprintWithThe"),
                     isWarning: true);
 
                 if (!trusted)
@@ -781,6 +939,12 @@ namespace Client.Windows
             return true;
         }
 
+        private const int FingerprintGroupsPerRow = 4;
+
+        private static string FormatFingerprintRows(string fingerprint) =>
+            string.Join(Environment.NewLine, fingerprint.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Chunk(FingerprintGroupsPerRow).Select(row => string.Join("  ", row)));
+
         private bool ShowFingerprintTrustDialog(
             string windowTitle,
             string heading,
@@ -792,13 +956,14 @@ namespace Client.Windows
         {
             string expectedSuffix = formattedFingerprint.Replace(" ", string.Empty)[^4..];
             string maskedFingerprint = formattedFingerprint[..^4] + "****";
+            string fingerprintRows = FormatFingerprintRows(maskedFingerprint);
 
             var dialog = new Window
             {
                 Title = windowTitle,
                 Owner = this,
-                Width = 720,
-                Height = 660,
+                Width = 384,
+                SizeToContent = SizeToContent.Height,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 ResizeMode = ResizeMode.NoResize,
                 ShowInTaskbar = false,
@@ -809,32 +974,32 @@ namespace Client.Windows
 
             var root = new Grid
             {
-                Margin = new Thickness(32)
+                Margin = new Thickness(16)
             };
 
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
             var title = new TextBlock
             {
                 Text = heading,
-                FontSize = 26,
+                FontSize = 21,
+                TextWrapping = TextWrapping.Wrap,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = isWarning
                     ? System.Windows.Media.Brushes.IndianRed
-                    : (System.Windows.Media.Brush)FindResource("PrimaryBrush")
+                    : (System.Windows.Media.Brush)FindResource("AccentBrush")
             };
 
             var warning = new TextBlock
             {
                 Text = message,
-                Margin = new Thickness(0, 16, 0, 22),
-                FontSize = 17,
-                LineHeight = 25,
+                Margin = new Thickness(0, 8, 0, 12),
+                FontSize = 15,
+                LineHeight = 21,
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush")
             };
@@ -849,10 +1014,10 @@ namespace Client.Windows
 
             var fingerprintBox = new TextBox
             {
-                Text = maskedFingerprint,
-                Height = 88,
-                Margin = new Thickness(0, 8, 0, 20),
-                Padding = new Thickness(14, 10, 14, 10),
+                Text = fingerprintRows,
+                Height = 102,
+                Margin = new Thickness(0, 5, 0, 10),
+                Padding = new Thickness(12, 6, 12, 6),
                 FontFamily = new System.Windows.Media.FontFamily("Consolas"),
                 FontSize = 17,
                 IsReadOnly = true,
@@ -866,8 +1031,8 @@ namespace Client.Windows
             var verification = new TextBlock
             {
                 Text = verificationText,
-                FontSize = 17,
-                LineHeight = 25,
+                FontSize = 15,
+                LineHeight = 21,
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush")
             };
@@ -876,16 +1041,16 @@ namespace Client.Windows
             verificationPanel.Children.Add(verification);
             verificationPanel.Children.Add(new TextBlock
             {
-                Text = "Inserisci le ultime 4 cifre comunicate dal destinatario",
-                Margin = new Thickness(0, 16, 0, 8),
-                FontSize = 16,
+                Text = Texts.T("EnterTheLast4CharactersProvided"),
+                Margin = new Thickness(0, 8, 0, 4),
+                FontSize = 14,
                 TextWrapping = TextWrapping.Wrap
             });
 
             var suffixInput = new TextBox
             {
                 MaxLength = 4,
-                Width = 150,
+                Width = 88,
                 Height = 42,
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalContentAlignment = VerticalAlignment.Center,
@@ -896,11 +1061,12 @@ namespace Client.Windows
                 Foreground = fingerprintBox.Foreground,
                 BorderBrush = fingerprintBox.BorderBrush
             };
-            verificationPanel.Children.Add(suffixInput);
+            var actions = new DockPanel();
+            verificationPanel.Children.Add(actions);
 
             var verificationError = new TextBlock
             {
-                Text = "I caratteri inseriti non corrispondono. Verifica di nuovo con il destinatario.",
+                Text = Texts.T("TheCharactersDoNotMatchCheck"),
                 Visibility = Visibility.Collapsed,
                 Margin = new Thickness(0, 8, 0, 0),
                 FontSize = 15,
@@ -913,14 +1079,14 @@ namespace Client.Windows
             {
                 Orientation = Orientation.Horizontal,
                 HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = new Thickness(0, 24, 0, 0)
+                VerticalAlignment = VerticalAlignment.Center
             };
 
             var rejectButton = new Button
             {
-                Content = "Annulla",
-                Width = 140,
-                Height = 44,
+                Content = Texts.T("Cancel"),
+                Width = 82,
+                Height = 40,
                 FontSize = 15,
                 IsCancel = true,
                 Background = System.Windows.Media.Brushes.Transparent,
@@ -930,11 +1096,11 @@ namespace Client.Windows
 
             var trustButton = new Button
             {
-                Content = "Check",
+                Content = Texts.T("Check"),
                 IsDefault = true,
-                Width = 140,
-                Height = 44,
-                Margin = new Thickness(12, 0, 0, 0),
+                Width = 78,
+                Height = 40,
+                Margin = new Thickness(6, 0, 0, 0),
                 FontSize = 15,
                 Background = (System.Windows.Media.Brush)FindResource("PrimaryBrush"),
                 Foreground = System.Windows.Media.Brushes.White,
@@ -958,22 +1124,24 @@ namespace Client.Windows
 
             buttons.Children.Add(rejectButton);
             buttons.Children.Add(trustButton);
+            DockPanel.SetDock(buttons, Dock.Right);
+            actions.Children.Add(buttons);
+            actions.Children.Add(suffixInput);
 
             Grid.SetRow(title, 0);
             Grid.SetRow(warning, 1);
             Grid.SetRow(fingerprintLabelTextBlock, 2);
             Grid.SetRow(fingerprintBox, 3);
             Grid.SetRow(verificationPanel, 4);
-            Grid.SetRow(buttons, 5);
 
             root.Children.Add(title);
             root.Children.Add(warning);
             root.Children.Add(fingerprintLabelTextBlock);
             root.Children.Add(fingerprintBox);
             root.Children.Add(verificationPanel);
-            root.Children.Add(buttons);
 
-            dialog.Content = root;
+            Views.WindowLayout.FitDialog(dialog, root);
+            dialog.Loaded += (_, _) => suffixInput.Focus();
 
             return dialog.ShowDialog() == true;
         }
@@ -1006,7 +1174,7 @@ namespace Client.Windows
 
             var dialog = new Window
             {
-                Title = "Possibile attacco MITM",
+                Title = Texts.T("PossibleMITMAttack"),
                 Owner = this,
                 Width = 790,
                 Height = 620,
@@ -1032,7 +1200,7 @@ namespace Client.Windows
 
             var title = new TextBlock
             {
-                Text = "Le tue chiavi pubbliche sono cambiate",
+                Text = Texts.T("YourPublicKeysHaveChanged"),
                 FontSize = 27,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = System.Windows.Media.Brushes.IndianRed
@@ -1040,9 +1208,7 @@ namespace Client.Windows
 
             var message = new TextBlock
             {
-                Text = "Le chiavi pubbliche associate al tuo account sul server non corrispondono " +
-                       "alle chiavi contenute nel vault cifrato locale. Potrebbe trattarsi di un " +
-                       "attacco man-in-the-middle.",
+                Text = Texts.T("OwnIdentityMismatch"),
                 Margin = new Thickness(0, 20, 0, 0),
                 FontSize = 18,
                 LineHeight = 27,
@@ -1052,9 +1218,7 @@ namespace Client.Windows
 
             var action = new TextBlock
             {
-                Text = "Puoi ripristinare sul server le chiavi originali conservate nel vault oppure " +
-                       "eliminare la vecchia identità e crearne una nuova. Se scegli una nuova identità, " +
-                       "i tuoi contatti dovranno verificarne nuovamente la fingerprint.",
+                Text = Texts.T("RecoveryExplanation"),
                 Margin = new Thickness(0, 18, 0, 0),
                 FontSize = 16,
                 FontWeight = FontWeights.SemiBold,
@@ -1064,8 +1228,7 @@ namespace Client.Windows
 
             var fingerprints = new TextBlock
             {
-                Text = $"Fingerprint nel vault:\n{vaultFingerprint}\n\n" +
-                       $"Fingerprint pubblicata dal server:\n{serverFingerprint}",
+                Text = Texts.T("RecoveryFingerprints", vaultFingerprint, serverFingerprint),
                 Margin = new Thickness(0, 20, 0, 0),
                 Padding = new Thickness(14),
                 FontFamily = new System.Windows.Media.FontFamily("Consolas"),
@@ -1086,7 +1249,7 @@ namespace Client.Windows
 
             var cancelButton = new Button
             {
-                Content = "Annulla accesso",
+                Content = Texts.T("CancelSignIn"),
                 Width = 150,
                 Height = 44,
                 FontSize = 16,
@@ -1098,7 +1261,7 @@ namespace Client.Windows
 
             var createIdentityButton = new Button
             {
-                Content = "Nuova identità",
+                Content = Texts.T("NewIdentity"),
                 Width = 150,
                 Height = 44,
                 Margin = new Thickness(12, 0, 0, 0),
@@ -1112,7 +1275,7 @@ namespace Client.Windows
 
             var restoreButton = new Button
             {
-                Content = "Ripristina dal vault",
+                Content = Texts.T("RestoreFromVault"),
                 Width = 180,
                 Height = 44,
                 Margin = new Thickness(12, 0, 0, 0),
@@ -1135,16 +1298,12 @@ namespace Client.Windows
 
             createIdentityButton.Click += (_, _) =>
             {
-                MessageBoxResult confirmation = MessageBox.Show(
-                    dialog,
-                    "La precedente identità privata verrà eliminata dal vault. " +
-                    "I trasferimenti destinati alle vecchie chiavi potrebbero non essere più decifrabili " +
-                    "e i contatti dovranno verificare la nuova fingerprint. Continuare?",
-                    "Crea nuova identità crittografica",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
+                bool confirmed = ConfirmAction(dialog,
+                    Texts.T("ConfirmIdentityReplacement"),
+                    Texts.T("CreateANewCryptographicIdentity"),
+                    Texts.T("NewIdentity"));
 
-                if (confirmation != MessageBoxResult.Yes)
+                if (!confirmed)
                     return;
 
                 selectedAction = OwnIdentityRecoveryAction.CreateNewIdentity;
@@ -1167,7 +1326,7 @@ namespace Client.Windows
             root.Children.Add(fingerprints);
             root.Children.Add(buttons);
 
-            dialog.Content = root;
+            Views.WindowLayout.FitDialog(dialog, root);
             dialog.ShowDialog();
 
             return selectedAction;
@@ -1179,7 +1338,7 @@ namespace Client.Windows
             bool showConfirmation = true)
         {
             if (_session is null || _vault is null)
-                throw new InvalidOperationException("La sessione o il vault non sono disponibili per il ripristino dell'identità.");
+                throw new InvalidOperationException(Texts.T("TheSessionOrVaultIsUnavailable"));
 
             bool createNewIdentity = recoveryAction == OwnIdentityRecoveryAction.CreateNewIdentity;
 
@@ -1201,7 +1360,7 @@ namespace Client.Windows
                 preservePreviousDecryptionKeys: !createNewIdentity);
 
             ClientSignedPreKeyState signedPreKey = _vault.SignedPreKey
-                ?? throw new InvalidOperationException("Non è stato possibile generare una signed pre-key.");
+                ?? throw new InvalidOperationException(Texts.T("CouldNotGenerateASignedPre"));
 
             List<ClientOneTimePreKeyState> activeOneTimePreKeys = _vault.OneTimePreKeys
                 .Where(preKey => !preKey.IsUsed)
@@ -1237,15 +1396,15 @@ namespace Client.Windows
             _session.EncryptedKeyPayload = encryptedKeyPayload;
 
             string operation = createNewIdentity
-                ? "È stata creata e pubblicata una nuova identità crittografica."
-                : "L’identità del vault è stata ripubblicata sul server.";
+                ? Texts.T("ANewCryptographicIdentityHasBeen")
+                : Texts.T("TheVaultIdentityHasBeenRepublished");
 
             if (showConfirmation)
             {
                 MessageBox.Show(
                     this,
-                    operation + " Il server contiene ora una nuova SPK e 25 OPK non utilizzate.",
-                    "Identità ripristinata",
+                    operation + Texts.T("TheServerNowHasANew"),
+                    Texts.T("IdentityRestored"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
             }
@@ -1281,7 +1440,7 @@ namespace Client.Windows
         {
             var dialog = new Window
             {
-                Title = "Integrità del file compromessa",
+                Title = Texts.T("FileIntegrityCompromised"),
                 Owner = this,
                 Width = 660,
                 Height = 390,
@@ -1305,7 +1464,7 @@ namespace Client.Windows
 
             var title = new TextBlock
             {
-                Text = "Possibile manomissione rilevata",
+                Text = Texts.T("PossibleTamperingDetected"),
                 FontSize = 27,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = System.Windows.Media.Brushes.IndianRed
@@ -1313,8 +1472,7 @@ namespace Client.Windows
 
             var message = new TextBlock
             {
-                Text = "La verifica di autenticità AES-GCM non è riuscita. Il contenuto cifrato " +
-                       "potrebbe essere stato modificato durante la permanenza sul server o durante il trasferimento.",
+                Text = Texts.T("AuthenticationFailed"),
                 Margin = new Thickness(0, 20, 0, 0),
                 FontSize = 18,
                 LineHeight = 27,
@@ -1325,10 +1483,8 @@ namespace Client.Windows
             var action = new TextBlock
             {
                 Text = removedFromServer
-                    ? "Per la tua sicurezza il file è stato scartato dal dispositivo. " +
-                      "Il server è stato avvisato e ha eliminato definitivamente il trasferimento cifrato."
-                    : "Per la tua sicurezza il file è stato scartato dal dispositivo. " +
-                      "Non è stato possibile confermare l’eliminazione dal server: riprova quando la connessione è disponibile.",
+                    ? Texts.T("TamperedRemoved")
+                    : Texts.T("TamperedNotConfirmed"),
                 Margin = new Thickness(0, 18, 0, 0),
                 FontSize = 19,
                 FontWeight = FontWeights.SemiBold,
@@ -1338,7 +1494,7 @@ namespace Client.Windows
 
             var closeButton = new Button
             {
-                Content = "Chiudi",
+                Content = Texts.T("Close"),
                 Width = 140,
                 Height = 44,
                 FontSize = 16,
@@ -1362,7 +1518,7 @@ namespace Client.Windows
             root.Children.Add(action);
             root.Children.Add(closeButton);
 
-            dialog.Content = root;
+            Views.WindowLayout.FitDialog(dialog, root);
             dialog.ShowDialog();
         }
 
@@ -1376,7 +1532,21 @@ namespace Client.Windows
             if (!DropZoneBorder.IsEnabled)
                 return;
 
+            for (var node = e.OriginalSource as System.Windows.Media.Visual; node != null && node != DropZoneBorder;
+                 node = System.Windows.Media.VisualTreeHelper.GetParent(node) as System.Windows.Media.Visual)
+                if (node is System.Windows.Controls.Primitives.ScrollBar)
+                    return;
+
             SelectFilesFromDialog();
+        }
+
+        private void DropZoneBorder_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (!e.IsRepeat && e.Key is System.Windows.Input.Key.Enter or System.Windows.Input.Key.Space)
+            {
+                e.Handled = true;
+                SelectFilesFromDialog();
+            }
         }
 
         private void DropZoneBorder_DragEnter(object sender, DragEventArgs e)
@@ -1415,7 +1585,7 @@ namespace Client.Windows
         {
             var dialog = new OpenFileDialog
             {
-                Title = $"Seleziona i file da inviare (massimo {MaximumFilesPerTransfer})",
+                Title = Texts.T("SelectFilesToSendUpTo", MaximumFilesPerTransfer),
                 Multiselect = true,
                 CheckFileExists = true
             };
@@ -1426,6 +1596,15 @@ namespace Client.Windows
                 return;
 
             SetSelectedFiles(dialog.FileNames);
+        }
+
+        private void FileStrip_MouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+        {
+            if (sender is ScrollViewer strip && strip.ScrollableWidth > 0)
+            {
+                strip.ScrollToHorizontalOffset(strip.HorizontalOffset - e.Delta);
+                e.Handled = true;
+            }
         }
 
         private void SetSelectedFiles(IEnumerable<string> filePaths)
@@ -1439,9 +1618,9 @@ namespace Client.Windows
                 _selectedFilePaths.Add(filePath);
 
                 var fileInfo = new FileInfo(filePath);
-                string displayText = $"{fileInfo.Name} - {FormatFileSize(fileInfo.Length)}";
-                SelectedFilesListBox.Items.Add(displayText);
-                SelectedFilesItemsControl.Items.Add(displayText);
+                var preview = new Views.SelectedFilePreview(fileInfo.Name, FormatFileSize(fileInfo.Length));
+                SelectedFilesListBox.Items.Add($"{preview.Name} - {preview.Size}");
+                SelectedFilesItemsControl.Items.Add(preview);
             }
 
             bool exceedsLimit = _selectedFilePaths.Count > MaximumFilesPerTransfer;
@@ -1449,8 +1628,8 @@ namespace Client.Windows
                 ? System.Windows.Media.Brushes.IndianRed
                 : System.Windows.Media.Brushes.LightGreen;
             SelectedFilesStatusTextBlock.Text = exceedsLimit
-                ? $"Hai selezionato {_selectedFilePaths.Count} file. Massimo {MaximumFilesPerTransfer} per invio: seleziona meno file."
-                : $"{_selectedFilePaths.Count}/{MaximumFilesPerTransfer} file selezionati.";
+                ? Texts.T("YouSelectedFilesTheLimitIs", _selectedFilePaths.Count, MaximumFilesPerTransfer)
+                : Texts.T("FilesSelected", _selectedFilePaths.Count, MaximumFilesPerTransfer);
             DropZonePromptTextBlock.Text = _selectedFilePaths.Count == 0
                 ? DropZoneReadyText
                 : DropZoneSelectedFilesText;
@@ -1460,7 +1639,8 @@ namespace Client.Windows
 
         private void SetSendButtonEnabled(bool isEnabled)
         {
-            isEnabled = isEnabled && _selectedFilePaths.Count <= MaximumFilesPerTransfer;
+            isEnabled = isEnabled && _selectedFilePaths.Count is > 0 and <= MaximumFilesPerTransfer
+                && IsCurrentRecipientTrustedForSend();
             SendEncryptedButton.IsEnabled = isEnabled;
             ApplyActionButtonVisual(SendEncryptedButton, isEnabled);
         }
@@ -1480,7 +1660,7 @@ namespace Client.Windows
 
                 button.Background = greenBrush;
                 button.BorderBrush = greenBrush;
-                button.Foreground = System.Windows.Media.Brushes.White;
+                button.Foreground = System.Windows.Media.Brushes.Black;
                 return;
             }
 
@@ -1506,14 +1686,12 @@ namespace Client.Windows
                 return;
             }
 
-            TrustedRecipientsComboBox.Items.Add("Contatti fidati");
-
             foreach (TrustedContact contact in GetVisibleTrustedContacts())
             {
                 TrustedRecipientsComboBox.Items.Add(contact.Username);
             }
 
-            TrustedRecipientsComboBox.SelectedIndex = 0;
+            TrustedRecipientsComboBox.SelectedIndex = -1;
             _isRefreshingTrustedRecipients = false;
         }
 
@@ -1525,8 +1703,7 @@ namespace Client.Windows
             if (TrustedRecipientsComboBox.SelectedItem is not string selectedUsername)
                 return;
 
-            if (selectedUsername == "Contatti fidati")
-                return;
+            TrustedRecipientsComboBox.SelectedIndex = -1;
 
             CheckBox? sendToSelfCheckBox = SendToSelfCheckBoxControl;
             if (sendToSelfCheckBox is not null)
@@ -1561,9 +1738,8 @@ namespace Client.Windows
             DropZoneBorder.IsEnabled = false;
             DropZonePromptTextBlock.Text = DropZoneDisabledText;
             SetSendButtonEnabled(false);
-            RecipientFingerprintTextBlock.Text = string.Empty;
             RecipientStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
-            RecipientStatusTextBlock.Text = "Destinatario cambiato, ricontrollare";
+            RecipientStatusTextBlock.Text = Texts.T("RecipientChangedCheckTheRecipientAgain");
         }
 
         private void RecipientUsernameTextBox_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -1640,7 +1816,6 @@ namespace Client.Windows
                 DropZonePromptTextBlock.Text = DropZoneDisabledText;
                 SetSendButtonEnabled(false);
                 RecipientStatusTextBlock.Text = string.Empty;
-                RecipientFingerprintTextBlock.Text = string.Empty;
 
                 if (!sendToSelf)
                 {
@@ -1665,7 +1840,7 @@ namespace Client.Windows
             if (_session is null)
             {
                 RecipientStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
-                RecipientStatusTextBlock.Text = "Devi effettuare il login prima di inviare file a te stesso.";
+                RecipientStatusTextBlock.Text = Texts.T("SignInBeforeSendingFilesTo");
                 return;
             }
 
@@ -1688,6 +1863,10 @@ namespace Client.Windows
                 _currentRecipientBundle.Username,
                 StringComparison.OrdinalIgnoreCase);
         }
+
+        private bool IsCurrentRecipientTrustedForSend() =>
+            _currentRecipientBundle is { } bundle && IsCurrentRecipientStillSelected() &&
+            (IsCurrentUserBundle(bundle) || IsRecipientAlreadyTrusted(bundle));
 
         private void ApplySendToSelfModeIfRecipientIsCurrentUser(string recipientUsername)
         {
@@ -1741,10 +1920,12 @@ namespace Client.Windows
                 return;
 
             if (_vault is null)
-                throw new InvalidOperationException("Il vault crittografico non è stato caricato.");
+                throw new InvalidOperationException(Texts.T("TheCryptographicVaultHasNotBeen"));
 
-            PreKeyBundleResponse freshBundle = await _apiClient.GetPreKeyBundleAsync(
-                _currentRecipientBundle.Username);
+            var previousBundle = _currentRecipientBundle;
+            PreKeyBundleResponse freshBundle = await _apiClient.GetPreKeyBundleAsync(previousBundle.Username);
+            if (!ReferenceEquals(previousBundle, _currentRecipientBundle) || !IsCurrentRecipientTrustedForSend())
+                throw new InvalidOperationException(Texts.T("CheckAndVerifyTheRecipientFirst"));
 
             byte[] fingerprint = _fingerprintService.ComputeFingerprint(
                 freshBundle.Username,
@@ -1761,17 +1942,16 @@ namespace Client.Windows
 
                 if (!matchesVault)
                     throw new InvalidOperationException(
-                        "Le chiavi pubbliche associate al tuo account sono cambiate. Trasferimento bloccato.");
+                        Texts.T("ThePublicKeysForYourAccountAlt"));
             }
             else if (!EnsureRecipientTrusted(freshBundle, formattedFingerprint))
             {
                 throw new InvalidOperationException(
-                    "La nuova identità del destinatario non è stata verificata. Trasferimento bloccato.");
+                    Texts.T("TheRecipientSNewIdentityHas"));
             }
 
             _currentRecipientBundle = freshBundle;
             _recipientBundleMustBeRefreshed = false;
-            RecipientFingerprintTextBlock.Text = formattedFingerprint;
 
             if (_sessionPassword is not null)
                 await SaveVaultAsync(_sessionPassword);
@@ -1797,31 +1977,32 @@ namespace Client.Windows
 
             if (_session is null)
             {
-                SelectedFilesStatusTextBlock.Text = "Devi prima effettuare l'accesso.";
+                SelectedFilesStatusTextBlock.Text = Texts.T("SignInFirst");
                 return;
             }
 
             if (_vault is null)
             {
-                SelectedFilesStatusTextBlock.Text = "Il vault crittografico non è stato caricato.";
+                SelectedFilesStatusTextBlock.Text = Texts.T("TheCryptographicVaultHasNotBeen");
                 return;
             }
 
-            if (_currentRecipientBundle is null)
+            if (!IsCurrentRecipientTrustedForSend())
             {
-                SelectedFilesStatusTextBlock.Text = "Controlla e verifica prima il destinatario.";
+                SelectedFilesStatusTextBlock.Text = Texts.T("CheckAndVerifyTheRecipientFirst");
+                SetSendButtonEnabled(false);
                 return;
             }
 
             if (_selectedFilePaths.Count == 0)
             {
-                SelectedFilesStatusTextBlock.Text = "Seleziona almeno un file.";
+                SelectedFilesStatusTextBlock.Text = Texts.T("SelectAtLeastOneFile");
                 return;
             }
 
             if (_selectedFilePaths.Count > MaximumFilesPerTransfer)
             {
-                SelectedFilesStatusTextBlock.Text = $"Puoi inviare al massimo {MaximumFilesPerTransfer} file per trasferimento. Seleziona meno file.";
+                SelectedFilesStatusTextBlock.Text = Texts.T("YouCanSendUpToFiles", MaximumFilesPerTransfer);
                 SetSendButtonEnabled(false);
                 return;
             }
@@ -1829,18 +2010,20 @@ namespace Client.Windows
             try
             {
                 SetSendButtonEnabled(false);
-                SendEncryptedButton.Content = "Cifro..";
+                SendEncryptedButton.Content = Texts.T("Encrypting");
                 SelectedFilesStatusTextBlock.Foreground = System.Windows.Media.Brushes.LightGreen;
-                SelectedFilesStatusTextBlock.Text = "Aggiorno le chiavi del destinatario...";
+                SelectedFilesStatusTextBlock.Text = Texts.T("UpdatingTheRecipientSKeys");
 
                 await RefreshRecipientBundleIfNeededAsync();
 
-                SelectedFilesStatusTextBlock.Text = "Creo il secret X3DH..";
+                if (_currentRecipientBundle is not { } verifiedBundle || !IsCurrentRecipientTrustedForSend())
+                    throw new InvalidOperationException(Texts.T("CheckAndVerifyTheRecipientFirst"));
+                SelectedFilesStatusTextBlock.Text = Texts.T("DerivingTheX3DHSecret");
                 int totalSendSteps = (_selectedFilePaths.Count * 2) + 1;
                 int completedSendSteps = 0;
                 ShowProgress(SendProgressBar, totalSendSteps);
 
-                X3dhPreKeyBundle recipientBundle = ToX3dhPreKeyBundle(_currentRecipientBundle);
+                X3dhPreKeyBundle recipientBundle = ToX3dhPreKeyBundle(verifiedBundle);
 
                 X3dhSecretResult x3dhResult = _x3dhService.CreateSenderSecret(
                     new X3dhSenderSecretInput(
@@ -1860,7 +2043,7 @@ namespace Client.Windows
                     string filePath = _selectedFilePaths[fileIndex];
                     var fileInfo = new FileInfo(filePath);
 
-                    SelectedFilesStatusTextBlock.Text = $"Cifratura di {fileInfo.Name}...";
+                    SelectedFilesStatusTextBlock.Text = Texts.T("EncryptingAlt", fileInfo.Name);
 
                     FileDerivedKeys fileKeys = _fileKeyDerivationService.DeriveFileKeys(
                         x3dhResult.RootKey,
@@ -1910,11 +2093,13 @@ namespace Client.Windows
                     UpdateProgress(SendProgressBar, completedSendSteps);
                 }
 
-                SelectedFilesStatusTextBlock.Text = "Avvio trasferimento...";
+                SelectedFilesStatusTextBlock.Text = Texts.T("StartingTransfer");
 
+                if (!ReferenceEquals(verifiedBundle, _currentRecipientBundle) || !IsCurrentRecipientTrustedForSend())
+                    throw new InvalidOperationException(Texts.T("CheckAndVerifyTheRecipientFirst"));
                 var createTransferRequest = new CreateTransferRequest
                 {
-                    RecipientUsername = _currentRecipientBundle.Username,
+                    RecipientUsername = verifiedBundle.Username,
                     X3dhHeader = serializedX3dhHeader,
                     Files = pendingEncryptedFiles
                         .Select(file => new CreateTransferFileRequest
@@ -1937,7 +2122,7 @@ namespace Client.Windows
                     CreateTransferFileResponse serverFile = createTransferResponse.Files
                         .Single(file => file.FileIndex == encryptedFile.FileIndex);
 
-                    SelectedFilesStatusTextBlock.Text = $"Caricamento file {encryptedFile.FileIndex + 1}/{pendingEncryptedFiles.Count}...";
+                    SelectedFilesStatusTextBlock.Text = Texts.T("UploadingFile", encryptedFile.FileIndex + 1, pendingEncryptedFiles.Count);
 
                     await using var encryptedFileStream = new FileStream(
                         encryptedFile.TempEncryptedFilePath,
@@ -1958,7 +2143,7 @@ namespace Client.Windows
                 }
 
                 SelectedFilesStatusTextBlock.Text =
-                    $"Inviato | Scade tra 24 ore > {createTransferResponse.ExpiresAtUtc:yyyy-MM-dd HH:mm:ss} UTC.";
+                    Texts.T("SentExpiresUTC", createTransferResponse.ExpiresAtUtc);
 
                 _selectedFilePaths.Clear();
                 SelectedFilesListBox.Items.Clear();
@@ -1986,14 +2171,14 @@ namespace Client.Windows
                 if (_selectedFilePaths.Count > 0)
                     SetSendButtonEnabled(true);
 
-                SendEncryptedButton.Content = "Invia";
+                SendEncryptedButton.Content = Texts.T("Send");
             }
         }
 
         private async Task SaveVaultAsync(string password)
         {
             if (_session is null || _vault is null)
-                throw new InvalidOperationException("La sessione o il vault crittografico non sono disponibili.");
+                throw new InvalidOperationException(Texts.T("TheCryptographicSessionOrVaultIs"));
 
             byte[] updatedEncryptedKeyPayload = _vaultService.EncryptVault(
                 password,
@@ -2020,25 +2205,25 @@ namespace Client.Windows
 
             if (_session is null)
             {
-                InboxStatusTextBlock.Text = "Devi prima effettuare l'accesso.";
+                InboxStatusTextBlock.Text = Texts.T("SignInFirst");
                 return;
             }
 
             if (_vault is null)
             {
-                InboxStatusTextBlock.Text = "Il vault crittografico non è stato caricato.";
+                InboxStatusTextBlock.Text = Texts.T("TheCryptographicVaultHasNotBeen");
                 return;
             }
 
             if (_sessionPassword is null)
             {
-                InboxStatusTextBlock.Text = "La password della sessione non è disponibile.";
+                InboxStatusTextBlock.Text = Texts.T("TheSessionPasswordIsUnavailable");
                 return;
             }
 
             if (InboxListBox.SelectedIndex < 0 || InboxListBox.SelectedIndex >= _inboxTransfers.Count)
             {
-                InboxStatusTextBlock.Text = "Seleziona prima un trasferimento.";
+                InboxStatusTextBlock.Text = Texts.T("SelectATransferFirst");
                 return;
             }
 
@@ -2050,7 +2235,7 @@ namespace Client.Windows
 
                 if (string.IsNullOrWhiteSpace(outputDirectory) || !Directory.Exists(outputDirectory))
                 {
-                    InboxStatusTextBlock.Text = "Default directory non valida. Scegli una directory valida o disattiva l'opzione.";
+                    InboxStatusTextBlock.Text = Texts.T("InvalidDefaultFolderChooseAValid");
                     return;
                 }
             }
@@ -2058,7 +2243,7 @@ namespace Client.Windows
             {
                 var folderDialog = new OpenFolderDialog
                 {
-                    Title = "Scegli dove salvare i file decifrati"
+                    Title = Texts.T("ChooseWhereToSaveTheDecrypted")
                 };
 
                 if (folderDialog.ShowDialog() != true)
@@ -2073,9 +2258,9 @@ namespace Client.Windows
             try
             {
                 SetDownloadButtonEnabled(false);
-                DownloadDecryptButton.Content = "Decifro..";
+                DownloadDecryptButton.Content = Texts.T("Decrypting");
                 InboxStatusTextBlock.Foreground = System.Windows.Media.Brushes.LightGreen;
-                InboxStatusTextBlock.Text = "Carico dettagli di trasferimento...";
+                InboxStatusTextBlock.Text = Texts.T("LoadingTransferDetails");
                 ResetProgress(InboxProgressBar);
 
                 TransferDetailResponse transferDetail = await _apiClient.GetTransferDetailAsync(
@@ -2094,7 +2279,7 @@ namespace Client.Windows
                     x3dhHeader.RecipientSignedPreKeyId);
 
                 if (recipientSignedPreKey is null)
-                    throw new InvalidOperationException("Il trasferimento usa una signed pre-key che non è più disponibile nel vault locale.");
+                    throw new InvalidOperationException(Texts.T("TheSignedPreKeyUsedFor"));
 
                 ClientOneTimePreKeyState? oneTimePreKey = null;
 
@@ -2104,7 +2289,7 @@ namespace Client.Windows
                         key.KeyId == x3dhHeader.RecipientOneTimePreKeyId.Value);
 
                     if (oneTimePreKey is null)
-                        throw new InvalidOperationException("Il trasferimento usa una one-time pre-key che non è più disponibile nel vault locale.");
+                        throw new InvalidOperationException(Texts.T("TheOneTimePreKeyUsed"));
                 }
 
                 transferOneTimePreKey = oneTimePreKey;
@@ -2132,7 +2317,7 @@ namespace Client.Windows
                 {
                     foreach (TransferFileResponse file in transferDetail.Files.OrderBy(file => file.FileIndex))
                     {
-                        InboxStatusTextBlock.Text = $"Scarico {file.FileIndex + 1}/{transferDetail.Files.Count}...";
+                        InboxStatusTextBlock.Text = Texts.T("DownloadingFile", file.FileIndex + 1, transferDetail.Files.Count);
 
                         FileDerivedKeys fileKeys = _fileKeyDerivationService.DeriveFileKeys(
                             recipientSecret.RootKey,
@@ -2193,7 +2378,7 @@ namespace Client.Windows
                 completedInboxSteps++;
                 UpdateProgress(InboxProgressBar, completedInboxSteps);
 
-                InboxStatusTextBlock.Text = "File scaricato, decifrato e rimosso dal server.";
+                InboxStatusTextBlock.Text = Texts.T("FileDownloadedDecryptedAndRemovedFrom");
 
                 await RefreshInboxAsync();
             }
@@ -2222,8 +2407,8 @@ namespace Client.Windows
 
                 InboxStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
                 InboxStatusTextBlock.Text = removedFromServer
-                    ? "File manomesso: scartato localmente ed eliminato dal server."
-                    : "File manomesso: scartato localmente; eliminazione server non confermata.";
+                    ? Texts.T("TamperedFileDiscardedLocallyAndDeleted")
+                    : Texts.T("TamperedFileDiscardedLocallyServerDeletion");
                 ShowDataTamperingWarning(removedFromServer);
 
                 if (removedFromServer)
@@ -2237,7 +2422,7 @@ namespace Client.Windows
             finally
             {
                 SetDownloadButtonEnabled(InboxListBox.SelectedIndex >= 0);
-                DownloadDecryptButton.Content = "Download";
+                DownloadDecryptButton.Content = Texts.T("Download");
             }
         }
 
@@ -2256,7 +2441,7 @@ namespace Client.Windows
             if (_session is null)
             {
                 InboxStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
-                InboxStatusTextBlock.Text = "Devi fare login";
+                InboxStatusTextBlock.Text = Texts.T("SignInFirstAlt");
                 UpdateInboxIndicator();
                 return;
             }
@@ -2295,8 +2480,8 @@ namespace Client.Windows
             InboxStatusTextBlock.Text = transfers.Count == 0
                 ? string.Empty
                 : transfers.Count == 1
-                    ? "1 trasferimento in attesa"
-                    : $"{transfers.Count} trasferimenti in attesa";
+                    ? Texts.T("1PendingTransfer")
+                    : Texts.T("PendingTransfers", transfers.Count);
             UpdateInboxIndicator();
         }
 
@@ -2304,7 +2489,7 @@ namespace Client.Windows
         {
             InboxStatusTextBlock.Foreground = new System.Windows.Media.SolidColorBrush(
                 System.Windows.Media.Color.FromRgb(245, 158, 11));
-            InboxStatusTextBlock.Text = "Aggiornamento..";
+            InboxStatusTextBlock.Text = Texts.T("Refreshing");
         }
 
         private void UpdateInboxIndicator()
@@ -2345,15 +2530,15 @@ namespace Client.Windows
         {
             string senderDisplayName = _session is not null &&
                 string.Equals(transfer.SenderUsername, _session.Username, StringComparison.OrdinalIgnoreCase)
-                    ? "Me"
+                    ? Texts.T("MeAlt")
                     : transfer.SenderUsername;
 
-            return $"{senderDisplayName} - {transfer.FileCount} file(s) - SCADE: {transfer.ExpiresAtUtc:yyyy-MM-dd HH:mm} UTC";
+            return Texts.T("FileSExpiresUTC", senderDisplayName, transfer.FileCount, transfer.ExpiresAtUtc);
         }
 
         private static string FormatFileSize(long bytes)
         {
-            string[] units = ["bytes", "KB", "MB", "GB", "TB"];
+            string[] units = [Texts.T("Bytes"), "KB", "MB", "GB", "TB"];
             double size = bytes;
             int unitIndex = 0;
 
@@ -2374,7 +2559,7 @@ namespace Client.Windows
             try
             {
                 RefreshInboxButton.IsEnabled = false;
-                RefreshInboxButton.Content = "Aggiornamento...";
+                RefreshInboxButton.Content = Texts.T("RefreshingAlt");
 
                 await RefreshInboxAsync();
             }
@@ -2386,24 +2571,18 @@ namespace Client.Windows
             finally
             {
                 RefreshInboxButton.IsEnabled = true;
-                RefreshInboxButton.Content = "Aggiorna";
+                RefreshInboxButton.Content = Texts.T("Refresh");
             }
-        }
-
-        private void TopTrustedContactsButton_Click(object sender, RoutedEventArgs e)
-        {
-            ShowTrustedContactsDialog();
         }
 
         private void LogoutButton_Click(object sender, RoutedEventArgs e)
         {
-            MessageBoxResult result = MessageBox.Show(
-                "Vuoi effettuare il logout?",
-                "Logout",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
+            bool confirmed = ConfirmAction(this,
+                Texts.T("LogOutOfThisSession"),
+                Texts.T("Logout"),
+                Texts.T("Logout"));
 
-            if (result != MessageBoxResult.Yes)
+            if (!confirmed)
                 return;
 
             Logout();
@@ -2415,6 +2594,9 @@ namespace Client.Windows
             _isInboxPollingRefreshRunning = false;
 
             _session = null;
+            WorkspaceTabs.SelectedIndex = 0;
+            IdentityUsername.Text = IdentityFingerprint.Text = ContactsStatus.Text = string.Empty;
+            TrustedContactsListBox.Items.Clear();
             _sessionPassword = null;
             _vault = null;
             _currentRecipientBundle = null;
@@ -2423,11 +2605,10 @@ namespace Client.Windows
             _inboxTransfers.Clear();
             _apiClient.ClearAuthentication();
 
-            SignedInUserTextBlock.Text = "Signed in";
+            SignedInUserTextBlock.Text = string.Empty;
             RecipientUsernameTextBox.Text = string.Empty;
             ApplyRecipientPlaceholderIfEmpty();
             RecipientStatusTextBlock.Text = string.Empty;
-            RecipientFingerprintTextBlock.Text = string.Empty;
             TrustedRecipientsComboBox.Items.Clear();
 
             SelectedFilesListBox.Items.Clear();
@@ -2454,331 +2635,47 @@ namespace Client.Windows
             ApplyScaledWindowSize(AuthDesignWidth, AuthDesignHeight);
         }
 
-        private void TopMyIdentityButton_Click(object sender, RoutedEventArgs e)
+        private sealed record ContactRow(string Username, string[] Groups);
+
+        private void WorkspaceTab_Changed(object sender, SelectionChangedEventArgs e)
         {
-            ShowMyIdentityDialog();
+            if (e.OriginalSource != WorkspaceTabs || _vault is null || _session is null) return;
+            if (IdentityTab.IsSelected)
+            {
+                IdentityUsername.Text = _session.Username;
+                IdentityFingerprint.Text = FormatFingerprintRows(OwnFingerprint());
+            }
+            else if (ContactsTab.IsSelected) RefreshTrustedContactsList();
         }
 
-        private void ShowMyIdentityDialog()
+        private string OwnFingerprint()
         {
-            if (_session is null || _vault is null)
-            {
-                MessageBox.Show(
-                    "L'identità crittografica non è ancora stata caricata.",
-                    "Identità",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-                return;
-            }
-
-            byte[] fingerprint = _fingerprintService.ComputeFingerprint(
-                _session.Username,
-                _vault.X25519IdentityPublicKey,
-                _vault.Ed25519IdentityPublicKey);
-
-            string fullFingerprint = _fingerprintService.FormatFingerprint(fingerprint, bytesToShow: fingerprint.Length);
-
-            var dialog = new Window
-            {
-                Title = "Identity",
-                Owner = this,
-                Width = 560,
-                Height = 390,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                ResizeMode = ResizeMode.NoResize,
-                Background = (System.Windows.Media.Brush)FindResource("AppBackgroundBrush"),
-                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush")
-            };
-            dialog.SourceInitialized += (_, _) => ApplyNativeTitleBarColors(dialog);
-
-            var root = new StackPanel
-            {
-                Margin = new Thickness(24)
-            };
-
-            root.Children.Add(new TextBlock
-            {
-                Text = "Identity",
-                FontSize = 24,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush")
-            });
-
-            root.Children.Add(new TextBlock
-            {
-                Text = _session.Username,
-                Margin = new Thickness(0, 6, 0, 20),
-                FontSize = 15,
-                Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush")
-            });
-
-            root.Children.Add(new TextBlock
-            {
-                Text = "Fingerprint completa",
-                FontSize = 13,
-                Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush")
-            });
-
-            root.Children.Add(new TextBox
-            {
-                Text = fullFingerprint,
-                Margin = new Thickness(0, 6, 0, 18),
-                FontSize = 15,
-                IsReadOnly = true,
-                TextWrapping = TextWrapping.Wrap,
-                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(17, 24, 39)),
-                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush"),
-                BorderBrush = (System.Windows.Media.Brush)FindResource("BorderBrush")
-            });
-
-            var buttons = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Right
-            };
-
-            var copyButton = new Button
-            {
-                Content = "Copia",
-                Height = 38,
-                Padding = new Thickness(18, 0, 18, 0),
-                Background = (System.Windows.Media.Brush)FindResource("PrimaryBrush"),
-                Foreground = System.Windows.Media.Brushes.White,
-                BorderThickness = new Thickness(0)
-            };
-
-            copyButton.Click += (_, _) =>
-            {
-                Clipboard.SetText(
-                    $"Username: {_session.Username}{Environment.NewLine}" +
-                    $"Fingerprint completa: {fullFingerprint}");
-            };
-
-            var closeButton = new Button
-            {
-                Content = "Chiudi",
-                Height = 38,
-                Margin = new Thickness(10, 0, 0, 0),
-                Padding = new Thickness(18, 0, 18, 0),
-                Background = System.Windows.Media.Brushes.Transparent,
-                Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush"),
-                BorderBrush = (System.Windows.Media.Brush)FindResource("BorderBrush")
-            };
-
-            closeButton.Click += (_, _) => dialog.Close();
-
-            buttons.Children.Add(copyButton);
-            buttons.Children.Add(closeButton);
-            root.Children.Add(buttons);
-
-            dialog.Content = root;
-            dialog.ShowDialog();
+            if (_vault is null || _session is null) return string.Empty;
+            byte[] hash = _fingerprintService.ComputeFingerprint(_session.Username, _vault.X25519IdentityPublicKey, _vault.Ed25519IdentityPublicKey);
+            return _fingerprintService.FormatFingerprint(hash, hash.Length);
         }
 
-        private void ShowTrustedContactsDialog()
+        private void CopyIdentity_Click(object sender, RoutedEventArgs e)
         {
-            var dialog = new Window
-            {
-                Title = "Contatti fidati",
-                Owner = this,
-                Width = 560,
-                Height = 420,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                ResizeMode = ResizeMode.NoResize,
-                Background = (System.Windows.Media.Brush)FindResource("AppBackgroundBrush"),
-                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush")
-            };
-            dialog.SourceInitialized += (_, _) => ApplyNativeTitleBarColors(dialog);
-
-            var root = new Grid
-            {
-                Margin = new Thickness(22)
-            };
-
-            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-            var title = new TextBlock
-            {
-                Text = "Contatti fidati",
-                FontSize = 22,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush")
-            };
-
-            var listBox = new System.Windows.Controls.ListBox
-            {
-                Margin = new Thickness(0, 16, 0, 14),
-                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(17, 24, 39)),
-                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush"),
-                BorderBrush = (System.Windows.Media.Brush)FindResource("BorderBrush")
-            };
-
-            var footer = new DockPanel();
-
-            var status = new TextBlock
-            {
-                VerticalAlignment = VerticalAlignment.Center,
-                Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush")
-            };
-
-            var removeButton = new Button
-            {
-                Content = "Rimuovi contatto",
-                Width = 150,
-                Height = 38,
-                IsEnabled = false,
-                Background = System.Windows.Media.Brushes.Transparent,
-                Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush"),
-                BorderBrush = (System.Windows.Media.Brush)FindResource("BorderBrush")
-            };
-
-            DockPanel.SetDock(removeButton, Dock.Right);
-            footer.Children.Add(removeButton);
-            footer.Children.Add(status);
-
-            Grid.SetRow(title, 0);
-            Grid.SetRow(listBox, 1);
-            Grid.SetRow(footer, 2);
-
-            root.Children.Add(title);
-            root.Children.Add(listBox);
-            root.Children.Add(footer);
-
-            dialog.Content = root;
-
-            List<TrustedContact> orderedContacts = [];
-
-            void RefreshDialogList()
-            {
-                listBox.Items.Clear();
-                orderedContacts = GetVisibleTrustedContacts();
-
-                foreach (TrustedContact contact in orderedContacts)
-                {
-                    byte[] fingerprint = _fingerprintService.ComputeFingerprint(
-                        contact.Username, contact.X25519IdentityPublicKey, contact.Ed25519IdentityPublicKey);
-                    listBox.Items.Add($"{contact.Username} - {_fingerprintService.FormatFingerprint(fingerprint, bytesToShow: fingerprint.Length)}");
-                }
-
-                status.Text = orderedContacts.Count == 0
-                    ? "Nessun contatto verificato"
-                    : orderedContacts.Count == 1 ? "1 Contatto fidato" : $"{orderedContacts.Count} Contatti fidati.";
-
-                removeButton.IsEnabled = false;
-            }
-
-            listBox.SelectionChanged += (_, _) =>
-            {
-                removeButton.IsEnabled = listBox.SelectedIndex >= 0;
-            };
-
-            removeButton.Click += async (_, _) =>
-            {
-                if (_vault is null || _sessionPassword is null)
-                    return;
-
-                if (listBox.SelectedIndex < 0 || listBox.SelectedIndex >= orderedContacts.Count)
-                    return;
-
-                TrustedContact selectedContact = orderedContacts[listBox.SelectedIndex];
-
-                MessageBoxResult result = MessageBox.Show(
-                    $"Rimuovi contatto verificato '{selectedContact.Username}'?",
-                    "Rimuovi contatto verificato",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
-
-                if (result != MessageBoxResult.Yes)
-                    return;
-
-                _vault.TrustedContacts.RemoveAll(contact =>
-                    string.Equals(contact.Username, selectedContact.Username, StringComparison.OrdinalIgnoreCase));
-
-                await SaveVaultAsync(_sessionPassword);
-
-                RefreshTrustedRecipientsComboBox();
-                RefreshDialogList();
-            };
-
-            RefreshDialogList();
-            dialog.ShowDialog();
-        }
-
-        private async void SidebarIdentityButton_Click(object sender, RoutedEventArgs e)
-        {
-            SidebarDetailPanel.Visibility = Visibility.Visible;
-            TrustedContactsListBox.Visibility = Visibility.Collapsed;
-            RemoveTrustedContactButton.Visibility = Visibility.Collapsed;
-
-            SidebarDetailTitleTextBlock.Text = "Identity & Prekeys";
-            SidebarDetailStatusTextBlock.Foreground = System.Windows.Media.Brushes.LightGreen;
-            SidebarDetailStatusTextBlock.Text = "Loading prekey status...";
-
-            if (_vault is null)
-            {
-                SidebarDetailStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
-                SidebarDetailStatusTextBlock.Text = "Il vault crittografico non è stato caricato.";
-                return;
-            }
-
-            try
-            {
-                PreKeyStatusResponse status = await _apiClient.GetPreKeyStatusAsync();
-
-                int localAvailableOpks = _vault.OneTimePreKeys.Count(key => key.IsUploaded && !key.IsUsed);
-
-                SidebarDetailStatusTextBlock.Text =
-                    $"Signed prekey: {(status.HasSignedPreKey ? $"available, id {status.SignedPreKeyId}" : "missing")}\n" +
-                    $"Server available OPKs: {status.AvailableOneTimePreKeys}\n" +
-                    $"Local available OPKs: {localAvailableOpks}\n" +
-                    $"Next local OPK id: {_vault.NextOneTimePreKeyId}";
-            }
-            catch (Exception ex)
-            {
-                SidebarDetailStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
-                SidebarDetailStatusTextBlock.Text = GetUserFacingError(ex);
-            }
-        }
-
-        private void SidebarTrustedButton_Click(object sender, RoutedEventArgs e)
-        {
-            SidebarDetailPanel.Visibility = Visibility.Visible;
-            TrustedContactsListBox.Visibility = Visibility.Visible;
-            RemoveTrustedContactButton.Visibility = Visibility.Visible;
-
-            SidebarDetailTitleTextBlock.Text = "Contatti fidati";
-            SidebarDetailStatusTextBlock.Foreground = System.Windows.Media.Brushes.LightGreen;
-
-            RefreshTrustedContactsList();
+            if (_vault != null && _session != null)
+                Clipboard.SetText(Texts.T("UsernameNFullFingerprint", _session.Username, OwnFingerprint()));
         }
 
         private void RefreshTrustedContactsList()
         {
+            string? selected = (TrustedContactsListBox.SelectedItem as ContactRow)?.Username;
             TrustedContactsListBox.Items.Clear();
-            RemoveTrustedContactButton.IsEnabled = false;
-
-            if (_vault is null)
+            if (_vault == null) return;
+            foreach (var contact in GetVisibleTrustedContacts())
             {
-                SidebarDetailStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
-                SidebarDetailStatusTextBlock.Text = "Vault non caricato.";
-                return;
+                byte[] hash = _fingerprintService.ComputeFingerprint(contact.Username, contact.X25519IdentityPublicKey, contact.Ed25519IdentityPublicKey);
+                var row = new ContactRow(contact.Username, _fingerprintService.FormatFingerprint(hash, hash.Length).Split(' '));
+                TrustedContactsListBox.Items.Add(row);
+                if (row.Username == selected) TrustedContactsListBox.SelectedItem = row;
             }
-
-            List<TrustedContact> visibleContacts = GetVisibleTrustedContacts();
-
-            foreach (TrustedContact contact in visibleContacts)
-            {
-                byte[] fingerprint = _fingerprintService.ComputeFingerprint(
-                    contact.Username, contact.X25519IdentityPublicKey, contact.Ed25519IdentityPublicKey);
-                TrustedContactsListBox.Items.Add($"{contact.Username} - {_fingerprintService.FormatFingerprint(fingerprint, bytesToShow: fingerprint.Length)}");
-            }
-
-            SidebarDetailStatusTextBlock.Foreground = System.Windows.Media.Brushes.LightGreen;
-            SidebarDetailStatusTextBlock.Text = visibleContacts.Count == 0
-                ? "Nessun contatto verificato ancora."
-                : $"{visibleContacts.Count} contatti verificati.";
+            int count = TrustedContactsListBox.Items.Count;
+            ContactsStatus.Text = count switch { 0 => Texts.T("NoTrustedContacts"), 1 => Texts.T("1TrustedContact"), _ => Texts.T("TrustedContacts", count) };
+            RemoveTrustedContactButton.IsEnabled = TrustedContactsListBox.SelectedItem != null;
         }
 
         private void TrustedContactsListBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -2791,32 +2688,51 @@ namespace Client.Windows
             if (_vault is null || _sessionPassword is null)
                 return;
 
-            if (TrustedContactsListBox.SelectedIndex < 0)
+            if (TrustedContactsListBox.SelectedItem is not ContactRow selectedContact) return;
+
+            bool confirmed = ConfirmAction(this,
+                Texts.T("RemoveTrustedContact", selectedContact.Username),
+                Texts.T("RemoveTrustedContactAlt"),
+                Texts.T("RemoveContact"));
+
+            if (!confirmed)
                 return;
 
-            List<TrustedContact> orderedContacts = GetVisibleTrustedContacts();
-
-            if (TrustedContactsListBox.SelectedIndex >= orderedContacts.Count)
-                return;
-
-            TrustedContact selectedContact = orderedContacts[TrustedContactsListBox.SelectedIndex];
-
-            MessageBoxResult result = MessageBox.Show(
-                $"Rimuovi contatto verificato '{selectedContact.Username}'?",
-                "Rimuovi contatto verificato",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-
-            if (result != MessageBoxResult.Yes)
-                return;
-
-            _vault.TrustedContacts.RemoveAll(contact =>
+            var vault = _vault;
+            var removed = vault.TrustedContacts.Find(contact =>
                 string.Equals(contact.Username, selectedContact.Username, StringComparison.OrdinalIgnoreCase));
-
-            await SaveVaultAsync(_sessionPassword);
+            if (removed is null) return;
+            vault.TrustedContacts.Remove(removed);
+            if (string.Equals(GetRecipientUsername(), removed.Username, StringComparison.OrdinalIgnoreCase))
+            {
+                ++_recipientCheckVersion;
+                _currentRecipientBundle = null;
+                _recipientBundleMustBeRefreshed = false;
+                RecipientUsernameTextBox.Clear();
+                ApplyRecipientPlaceholderIfEmpty();
+                RecipientStatusTextBlock.Text = string.Empty;
+                DropZoneBorder.IsEnabled = false;
+                DropZonePromptTextBlock.Text = DropZoneDisabledText;
+                SetSendButtonEnabled(false);
+                ResetProgress(SendProgressBar);
+            }
 
             RefreshTrustedRecipientsComboBox();
             RefreshTrustedContactsList();
+            try
+            {
+                await SaveVaultAsync(_sessionPassword);
+            }
+            catch (Exception ex)
+            {
+                if (_vault != vault) return;
+                if (!vault.TrustedContacts.Any(contact =>
+                    string.Equals(contact.Username, removed.Username, StringComparison.OrdinalIgnoreCase)))
+                    vault.TrustedContacts.Add(removed);
+                RefreshTrustedRecipientsComboBox();
+                RefreshTrustedContactsList();
+                ContactsStatus.Text = GetUserFacingError(ex);
+            }
         }
 
         private List<TrustedContact> GetVisibleTrustedContacts()
@@ -2828,6 +2744,28 @@ namespace Client.Windows
                 .Where(contact => !IsCurrentUserTrustedContact(contact))
                 .OrderBy(contact => contact.Username)
                 .ToList();
+        }
+
+        private bool ConfirmAction(Window owner, string message, string title, string action)
+        {
+            var dialog = new Window { Owner = owner, Title = title, Width = 400, SizeToContent = SizeToContent.Height,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.NoResize, ShowInTaskbar = false,
+                Background = (System.Windows.Media.Brush)FindResource("AppBackgroundBrush"),
+                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush") };
+            dialog.SourceInitialized += (_, _) => ApplyNativeTitleBarColors(dialog);
+            var panel = new StackPanel { Margin = new Thickness(18) };
+            panel.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, FontSize = 15 });
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 14, 0, 0) };
+            var cancel = new Button { Content = Texts.T("Cancel"), IsCancel = true };
+            var confirm = new Button { Content = action, Margin = new Thickness(8,0,0,0) };
+            confirm.Click += (_, _) => dialog.DialogResult = true;
+            buttons.Children.Add(cancel);
+            buttons.Children.Add(confirm);
+            panel.Children.Add(buttons);
+            Views.WindowLayout.FitDialog(dialog, panel);
+            dialog.Loaded += (_, _) => cancel.Focus();
+            return dialog.ShowDialog() == true;
         }
 
         private bool IsCurrentUserTrustedContact(TrustedContact contact)
@@ -2850,22 +2788,20 @@ namespace Client.Windows
             return exception switch
             {
                 System.Net.Http.HttpRequestException =>
-                    "Impossibile comunicare con il server. Controlla la connessione e l'indirizzo configurato.",
+                    Texts.T("CannotReachTheServerCheckYour"),
                 TaskCanceledException =>
-                    "La richiesta ha impiegato troppo tempo ed è stata annullata. Riprova.",
+                    Texts.T("TheRequestTimedOutTryAgain"),
                 UriFormatException =>
-                    "L'indirizzo del server non è valido.",
+                    Texts.T("InvalidServerAddress"),
                 System.Text.Json.JsonException =>
-                    "Il server ha restituito dati in un formato non valido.",
+                    Texts.T("TheServerReturnedInvalidData"),
                 IOException =>
-                    "Non è stato possibile leggere o scrivere il file.",
+                    Texts.T("CouldNotReadOrWriteThe"),
                 System.Security.Cryptography.AuthenticationTagMismatchException =>
-                    "La verifica crittografica dei dati non è riuscita.",
-                InvalidOperationException when !string.IsNullOrWhiteSpace(exception.Message) =>
-                    exception.Message,
-                ArgumentException when !string.IsNullOrWhiteSpace(exception.Message) =>
-                    exception.Message,
-                _ => "Si è verificato un errore imprevisto. Riprova."
+                    Texts.T("CryptographicVerificationFailed"),
+                InvalidOperationException => Texts.ErrorOr(exception.Message, "OperationUnavailable"),
+                ArgumentException => Texts.ErrorOr(exception.Message, "InvalidOperationData"),
+                _ => Texts.T("AnUnexpectedErrorOccurredTryAgain")
             };
         }
 
@@ -2878,7 +2814,7 @@ namespace Client.Windows
                 return path;
 
             string directory = Path.GetDirectoryName(path)
-                ?? throw new InvalidOperationException("Directory di output non valida.");
+                ?? throw new InvalidOperationException(Texts.T("InvalidOutputFolder"));
 
             string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(path);
             string extension = Path.GetExtension(path);

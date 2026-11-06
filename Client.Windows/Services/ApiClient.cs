@@ -28,7 +28,7 @@ namespace Client.Windows.Services
         private void ConfigureServerUrl(string serverUrl)
         {
             if (string.IsNullOrWhiteSpace(serverUrl))
-                throw new ArgumentException("L'indirizzo del server è obbligatorio.", nameof(serverUrl));
+                throw new ArgumentException(Texts.T("TheServerAddressIsRequired"), nameof(serverUrl));
 
             string normalizedServerUrl = serverUrl.Trim().TrimEnd('/');
 
@@ -73,7 +73,7 @@ namespace Client.Windows.Services
 
             LoginResponse loginResponse = await response.Content.ReadFromJsonAsync<LoginResponse>(
                 cancellationToken: cancellationToken)
-                ?? throw new InvalidOperationException("La risposta di accesso ricevuta dal server non è valida.");
+                ?? throw new InvalidOperationException(Texts.T("TheServerReturnedAnInvalidSign"));
 
             Jwt = loginResponse.Jwt;
 
@@ -105,6 +105,16 @@ namespace Client.Windows.Services
             await EnsureSuccessAsync(response, ApiOperation.ConnectionCheck, cancellationToken);
         }
 
+        public async Task<bool> UsernameExistsAsync(string username, CancellationToken cancellationToken = default)
+        {
+            using var response = await _httpClient.PostAsJsonAsync("api/auth/username-exists",
+                new UsernameLookupRequest(username), cancellationToken);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                throw new InvalidOperationException(Texts.T("ThisServerDoesNotSupportUsername"));
+            await EnsureSuccessAsync(response, ApiOperation.UsernameLookup, cancellationToken);
+            return await response.Content.ReadFromJsonAsync<bool>(cancellationToken);
+        }
+
         public async Task<CurrentUserResponse> GetCurrentUserAsync(
             CancellationToken cancellationToken = default)
         {
@@ -115,7 +125,7 @@ namespace Client.Windows.Services
             CurrentUserResponse? response = await httpResponse.Content.ReadFromJsonAsync<CurrentUserResponse>(
                 cancellationToken: cancellationToken);
 
-            return response ?? throw new InvalidOperationException("La risposta relativa all'utente non è valida.");
+            return response ?? throw new InvalidOperationException(Texts.T("TheServerReturnedAnInvalidUser"));
         }
 
         public async Task RegisterAsync(
@@ -143,7 +153,7 @@ namespace Client.Windows.Services
             PreKeyStatusResponse? response = await httpResponse.Content.ReadFromJsonAsync<PreKeyStatusResponse>(
                 cancellationToken: cancellationToken);
 
-            return response ?? throw new InvalidOperationException("La risposta sullo stato delle pre-key non è valida.");
+            return response ?? throw new InvalidOperationException(Texts.T("TheServerReturnedInvalidPreKey"));
         }
 
         public async Task UploadSignedPreKeyAsync(
@@ -209,7 +219,7 @@ namespace Client.Windows.Services
             EnsureAuthenticated();
 
             if (string.IsNullOrWhiteSpace(username))
-                throw new ArgumentException("Inserire il nome utente del destinatario.", nameof(username));
+                throw new ArgumentException(Texts.T("EnterTheRecipientSUsernameAlt"), nameof(username));
 
             string escapedUsername = Uri.EscapeDataString(username.Trim());
 
@@ -222,7 +232,7 @@ namespace Client.Windows.Services
             PreKeyBundleResponse? bundle = await response.Content.ReadFromJsonAsync<PreKeyBundleResponse>(
                 cancellationToken: cancellationToken);
 
-            return bundle ?? throw new InvalidOperationException("Il bundle di pre-key ricevuto non è valido.");
+            return bundle ?? throw new InvalidOperationException(Texts.T("TheServerReturnedAnInvalidPre"));
         }
 
         public async Task<CreateTransferResponse> CreateTransferAsync(
@@ -241,7 +251,7 @@ namespace Client.Windows.Services
             CreateTransferResponse? transferResponse = await response.Content.ReadFromJsonAsync<CreateTransferResponse>(
                 cancellationToken: cancellationToken);
 
-            return transferResponse ?? throw new InvalidOperationException("La risposta di creazione del trasferimento non è valida.");
+            return transferResponse ?? throw new InvalidOperationException(Texts.T("TheServerReturnedAnInvalidTransfer"));
         }
 
         public async Task UploadTransferFileContentAsync(
@@ -299,7 +309,7 @@ namespace Client.Windows.Services
             TransferDetailResponse? response = await httpResponse.Content.ReadFromJsonAsync<TransferDetailResponse>(
                 cancellationToken: cancellationToken);
 
-            return response ?? throw new InvalidOperationException("I dettagli del trasferimento ricevuti non sono validi.");
+            return response ?? throw new InvalidOperationException(Texts.T("TheTransferDetailsAreInvalid"));
         }
 
         public async Task DownloadTransferFileContentToAsync(
@@ -367,7 +377,7 @@ namespace Client.Windows.Services
         private void EnsureAuthenticated()
         {
             if (string.IsNullOrWhiteSpace(Jwt))
-                throw new InvalidOperationException("Il client non è autenticato. Eseguire nuovamente l'accesso.");
+                throw new InvalidOperationException(Texts.T("YouAreNotSignedInSign"));
         }
 
         private static async Task EnsureSuccessAsync(
@@ -383,26 +393,28 @@ namespace Client.Windows.Services
             {
                 HttpStatusCode.BadRequest => TranslateBadRequest(serverMessage),
                 HttpStatusCode.Unauthorized when operation == ApiOperation.Login =>
-                    "Username o password non corretti. Dopo cinque tentativi errati l'account viene bloccato per 10 minuti.",
+                    Texts.T("IncorrectUsernameOrPasswordAfterFive"),
                 HttpStatusCode.Unauthorized =>
-                    "Sessione scaduta o non valida. Eseguire nuovamente l'accesso.",
+                    Texts.T("YourSessionHasExpiredOrIs"),
                 HttpStatusCode.Forbidden =>
-                    "Non disponi dei permessi necessari per eseguire questa operazione.",
+                    Texts.T("YouDoNotHavePermissionTo"),
                 HttpStatusCode.NotFound when operation == ApiOperation.BundleRequest =>
-                    "Destinatario non trovato oppure privo delle chiavi necessarie.",
+                    Texts.T("RecipientNotFoundOrMissingThe"),
                 HttpStatusCode.NotFound =>
-                    "La risorsa richiesta non è stata trovata.",
+                    Texts.T("TheRequestedResourceWasNotFound"),
                 HttpStatusCode.Conflict when operation == ApiOperation.Registration =>
-                    "Questo nome utente è già utilizzato.",
+                    Texts.T("ThatUsernameIsAlreadyTaken"),
                 HttpStatusCode.Conflict =>
-                    "L'operazione non può essere completata nello stato attuale.",
+                    Texts.T("ThisOperationCannotBeCompletedIn"),
                 HttpStatusCode.RequestEntityTooLarge =>
-                    "Il file o la richiesta supera la dimensione consentita dal server.",
+                    Texts.T("TheFileOrRequestExceedsThe"),
+                HttpStatusCode.TooManyRequests when operation == ApiOperation.UsernameLookup =>
+                    Texts.T("TooManyUsernameChecksTryAgain"),
                 HttpStatusCode.TooManyRequests =>
-                    "Troppe richieste. Riprova tra 10 minuti.",
+                    Texts.T("TooManyRequestsTryAgainIn"),
                 >= HttpStatusCode.InternalServerError =>
-                    "Il server ha riscontrato un errore. Riprova più tardi.",
-                _ => $"Operazione non riuscita. Codice HTTP {(int)response.StatusCode}."
+                    Texts.T("TheServerEncounteredAnErrorTry"),
+                _ => Texts.T("OperationFailedHTTPStatus", (int)response.StatusCode)
             };
 
             throw new InvalidOperationException(message);
@@ -411,27 +423,28 @@ namespace Client.Windows.Services
         private static string TranslateBadRequest(string serverMessage)
         {
             if (serverMessage.Contains("Username is required", StringComparison.OrdinalIgnoreCase))
-                return "Il nome utente è obbligatorio.";
+                return Texts.T("UsernameIsRequiredAlt");
             if (serverMessage.Contains("Password is required", StringComparison.OrdinalIgnoreCase))
-                return "La password è obbligatoria.";
+                return Texts.T("PasswordIsRequiredAlt");
             if (serverMessage.Contains("at least 12", StringComparison.OrdinalIgnoreCase))
-                return "La password deve contenere almeno 12 caratteri.";
+                return Texts.T("ThePasswordMustContainAtLeast");
             if (serverMessage.Contains("uppercase", StringComparison.OrdinalIgnoreCase))
-                return "La password deve contenere almeno una lettera maiuscola.";
+                return Texts.T("ThePasswordMustIncludeAnUppercase");
             if (serverMessage.Contains("lowercase", StringComparison.OrdinalIgnoreCase))
-                return "La password deve contenere almeno una lettera minuscola.";
+                return Texts.T("ThePasswordMustIncludeALowercase");
             if (serverMessage.Contains("number", StringComparison.OrdinalIgnoreCase) ||
                 serverMessage.Contains("digit", StringComparison.OrdinalIgnoreCase))
-                return "La password deve contenere almeno un numero.";
+                return Texts.T("ThePasswordMustIncludeADigit");
             if (serverMessage.Contains("special", StringComparison.OrdinalIgnoreCase) ||
                 serverMessage.Contains("non alphanumeric", StringComparison.OrdinalIgnoreCase))
-                return "La password deve contenere almeno un carattere speciale.";
+                return Texts.T("ThePasswordMustIncludeASpecial");
 
-            return "La richiesta inviata al server non è valida.";
+            return Texts.T("InvalidRequest");
         }
 
         private enum ApiOperation
         {
+            UsernameLookup,
             Login,
             Registration,
             ConnectionCheck,
