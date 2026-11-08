@@ -5,9 +5,9 @@
 
 | Tipo | File | OS | Version | Link |
 | :--- | :--- | :--- | :--- | :--- |
-| **Client** | `NOX-Setup-3.0.exe` | Windows | 3.0.0 | [Download](https://github.com/gabrielechi/Nox/releases/download/v.3.0/NOX-Setup-3.0.exe) |
-| **Server** | `LinuxServer.zip` | Linux | 2.0.0 | [Download](https://github.com/gabrielechi/Nox/releases/download/v.2.0/LinuxServer.zip) |
-| **Server** | `WinServer.zip` | Windows | 2.0.0 |  [Download](https://github.com/gabrielechi/Nox/releases/download/v.2.0/WinServer.zip)|
+| **Client** | `NOX-Setup-3.0.exe` | Windows | 3.1 | [Download](https://github.com/gabrielechi/Nox/releases/download/v.3.1/NOX-Setup-3.1.exe) |
+| **Server** | `LinuxServer.zip` | Linux | 2.0 | [Download](https://github.com/gabrielechi/Nox/releases/download/v.2.0/LinuxServer.zip) |
+| **Server** | `WinServer.zip` | Windows | 2.0 |  [Download](https://github.com/gabrielechi/Nox/releases/download/v.2.0/WinServer.zip)|
 
 ## ⚙️​More about Nox
 This project is a thesis prototype for asynchronous end-to-end encrypted file transfer.  
