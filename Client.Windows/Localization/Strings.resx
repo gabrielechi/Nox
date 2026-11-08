@@ -1,5 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <root>
+  <data name="NoAccount" xml:space="preserve"><value>Non ho un account</value></data>
+  <data name="AlreadyHaveAccount" xml:space="preserve"><value>Ho già un account</value></data>
+  <data name="Registration" xml:space="preserve"><value>Registrazione</value></data>
+  <data name="LoginError" xml:space="preserve"><value>Errore di login</value></data>
+  <data name="PasswordStrength" xml:space="preserve"><value>Robustezza stimata</value></data>
+  <data name="StrengthEmpty" xml:space="preserve"><value>Robustezza: —</value></data>
+  <data name="StrengthCalculating" xml:space="preserve"><value>Valutazione in corso...</value></data>
+  <data name="StrengthWeak" xml:space="preserve"><value>Debole</value></data>
+  <data name="StrengthFair" xml:space="preserve"><value>Discreta</value></data>
+  <data name="StrengthGood" xml:space="preserve"><value>Buona</value></data>
+  <data name="StrengthStrong" xml:space="preserve"><value>Forte</value></data>
+  <data name="StrengthResult" xml:space="preserve"><value>Robustezza: {0}</value></data>
+  <data name="StrengthUnavailable" xml:space="preserve"><value>Robustezza non disponibile</value></data>
+  <data name="PasswordStrengthExplanation" xml:space="preserve"><value>Stima locale, non una misura esatta dell'entropia né una garanzia di sicurezza. Non sostituisce i requisiti della password.</value></data>
+  <data name="Server" xml:space="preserve"><value>Server</value></data>
+  <data name="Protocol" xml:space="preserve"><value>Protocollo</value></data>
+  <data name="ChangeServer" xml:space="preserve"><value>Cambia server</value></data>
   <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
   <resheader name="version"><value>2.0</value></resheader>
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms</value></resheader>
@@ -97,7 +114,7 @@
   <data name="EncryptingAlt" xml:space="preserve"><value>Cifratura di {0}...</value></data>
   <data name="StartingTransfer" xml:space="preserve"><value>Avvio trasferimento...</value></data>
   <data name="UploadingFile" xml:space="preserve"><value>Caricamento file {0}/{1}...</value></data>
-  <data name="SentExpiresUTC" xml:space="preserve"><value>Inviato | Scade tra 24 ore &gt; {0:yyyy-MM-dd HH:mm:ss} UTC.</value></data>
+  <data name="SentExpires" xml:space="preserve"><value>Inviato | Scadenza: {0}.</value></data>
   <data name="Send" xml:space="preserve"><value>Invia</value></data>
   <data name="TheCryptographicSessionOrVaultIs" xml:space="preserve"><value>La sessione o il vault crittografico non sono disponibili.</value></data>
   <data name="SelectATransferFirst" xml:space="preserve"><value>Seleziona prima un trasferimento.</value></data>
@@ -117,7 +134,7 @@
   <data name="PendingTransfers" xml:space="preserve"><value>{0} trasferimenti in attesa</value></data>
   <data name="Refreshing" xml:space="preserve"><value>Aggiornamento..</value></data>
   <data name="MeAlt" xml:space="preserve"><value>Me</value></data>
-  <data name="FileSExpiresUTC" xml:space="preserve"><value>{0} - {1} file(s) - SCADE: {2:yyyy-MM-dd HH:mm} UTC</value></data>
+  <data name="FileSExpires" xml:space="preserve"><value>{0} - {1} file - Scadenza: {2}</value></data>
   <data name="Bytes" xml:space="preserve"><value>bytes</value></data>
   <data name="RefreshingAlt" xml:space="preserve"><value>Aggiornamento...</value></data>
   <data name="Refresh" xml:space="preserve"><value>Aggiorna</value></data>
@@ -174,7 +191,7 @@ Fingerprint completa: {1}</value></data>
   <data name="EndToEndEncryptedFileTransfer" xml:space="preserve"><value>End-to-End Encrypted File Transfer</value></data>
   <data name="Minimize" xml:space="preserve"><value>Riduci a icona</value></data>
   <data name="SignInAlt" xml:space="preserve"><value>Accesso</value></data>
-  <data name="ServerURL" xml:space="preserve"><value>Server URL  |</value></data>
+  <data name="ServerURL" xml:space="preserve"><value>Server URL</value></data>
   <data name="ServerProtocol" xml:space="preserve"><value>Protocollo del server</value></data>
   <data name="UnencryptedConnectionUseHTTPOnlyFor" xml:space="preserve"><value>Connessione non cifrata: usa HTTP solo per prove locali.</value></data>
   <data name="ServerAddress" xml:space="preserve"><value>Indirizzo del server</value></data>

@@ -26,6 +26,10 @@ namespace Client.Windows
 
         private readonly DispatcherTimer _inboxPollingTimer = new();
         private bool _isInboxPollingRefreshRunning;
+        private readonly SemaphoreSlim _inboxRefreshGate = new(1, 1);
+        private bool _isDownloading;
+        private bool _isManualInboxRefresh;
+        private int _inboxRevision;
 
         private static string DropZoneDisabledText => Texts.T("SelectARecipient");
         private static string DropZoneReadyText => Texts.T("DragFilesHereOrClickTo");
@@ -35,9 +39,8 @@ namespace Client.Windows
         private static string SendToSelfDisplayText => Texts.T("Me");
         private static string DirectoryPlaceholder => Texts.T("DefaultFolder");
         private const double AuthDesignWidth = 432;
-        private const double AuthDesignHeight = 636;
-        private const double DashboardDesignWidth = 744;
-        private const double DashboardDesignHeight = 596;
+        private const double DashboardDesignWidth = 776;
+        private const double DashboardDesignHeight = 582;
         private const double WindowScreenPadding = 32;
 
         private readonly ApiClient _apiClient = new();
@@ -62,6 +65,7 @@ namespace Client.Windows
         private bool _suppressRememberServerChange = true;
         private bool _isApplyingSendToSelfMode;
         private bool _suppressSendToSelfAutoCheck;
+        private bool _recipientLocked;
 
         private readonly IX3dhService _x3dhService = new X3dhService(new KeyPairService(), new HkdfService());
         private readonly IX3dhHeaderSerializer _x3dhHeaderSerializer = new X3dhHeaderJsonSerializer();
@@ -97,14 +101,15 @@ namespace Client.Windows
             SizeChanged += (_, _) => ArrangeDashboardHeader();
             DpiChanged += (_, _) => Dispatcher.InvokeAsync(UpdateWorkspaceLayout);
 
-            _inboxPollingTimer.Interval = TimeSpan.FromSeconds(30);
+            _inboxPollingTimer.Interval = TimeSpan.FromSeconds(5);
             _inboxPollingTimer.Tick += InboxPollingTimer_Tick;
 
             SetSendButtonEnabled(false);
             SetDownloadButtonEnabled(false);
             LoadClientAppSettings(settings);
             _suppressRememberServerChange = false;
-            ApplyScaledWindowSize(AuthDesignWidth, AuthDesignHeight);
+            InitializeAuthWindowLayout();
+            InitializePasswordStrength();
         }
 
         private void MainWindow_SourceInitialized(object? sender, EventArgs e)
@@ -152,7 +157,7 @@ namespace Client.Windows
 
         private async void InboxPollingTimer_Tick(object? sender, EventArgs e)
         {
-            if (_isInboxPollingRefreshRunning)
+            if (_isInboxPollingRefreshRunning || _isDownloading || _isManualInboxRefresh || _inboxRefreshGate.CurrentCount == 0)
                 return;
 
             if (_session is null)
@@ -207,7 +212,7 @@ namespace Client.Windows
             LoginLanguageBox.SelectedValue = DashboardLanguageBox.SelectedValue = code;
             if (placeholder) RecipientUsernameTextBox.Text = RecipientPlaceholderText;
             SetDefaultDownloadDirectoryText(directory);
-            foreach (var label in new[] { AuthErrorTextBlock, ServerStatusLabel, SignedInUserTextBlock, RecipientStatusTextBlock,
+            foreach (var label in new[] { AuthErrorTextBlock, SignedInUserTextBlock, RecipientStatusTextBlock,
                          DropZonePromptTextBlock, SelectedFilesStatusTextBlock, InboxStatusTextBlock, ContactsStatus })
             {
                 string next = Texts.Refresh(label.Text);
@@ -220,6 +225,7 @@ namespace Client.Windows
                     if (next != old) button.Content = next;
                 }
             UpdateRegistrationHint();
+            UpdatePasswordStrengthVisuals();
             int selection = InboxListBox.SelectedIndex;
             for (int i = 0; i < _inboxTransfers.Count; i++) InboxListBox.Items[i] = FormatInboxTransfer(_inboxTransfers[i]);
             InboxListBox.SelectedIndex = selection;
@@ -230,6 +236,7 @@ namespace Client.Windows
 
         private void ApplyScaledWindowSize(double designWidth, double designHeight)
         {
+            StopAuthWindowAnimation();
             if (WindowState != WindowState.Normal) WindowState = WindowState.Normal;
             _designWidth = designWidth;
             _designHeight = designHeight;
@@ -243,6 +250,12 @@ namespace Client.Windows
 
         private void UpdateWorkspaceLayout()
         {
+            if (AuthScreen.Visibility == Visibility.Visible && _authLayoutReady)
+            {
+                if (Views.WindowLayout.WorkSize(this) != _authWorkSize)
+                    RequestAuthWindowResize(false);
+                return;
+            }
             if (_designWidth == 0) return;
             Size area = Views.WindowLayout.WorkSize(this);
             double maxWidth = Math.Min(_designWidth, Math.Max(1, area.Width - WindowScreenPadding));
@@ -256,7 +269,7 @@ namespace Client.Windows
         private void ArrangeDashboardHeader()
         {
             if (HeaderActions is null) return;
-            bool compact = ActualWidth < 670;
+            bool compact = ActualWidth < 540;
             Grid.SetRow(HeaderActions, compact ? 1 : 0);
             Grid.SetColumn(HeaderActions, compact ? 0 : 1);
             Grid.SetColumnSpan(HeaderActions, compact ? 2 : 1);
@@ -282,6 +295,7 @@ namespace Client.Windows
 
             string username = UsernameTextBox.Text.Trim();
             string password = PasswordBox.Password;
+            if (_usernameExists == false) return;
 
             if (string.IsNullOrWhiteSpace(username))
             {
@@ -296,8 +310,10 @@ namespace Client.Windows
                 try
                 {
                     await System.Windows.Threading.Dispatcher.Yield(DispatcherPriority.Background);
-                    SetUsernameChoice(await _apiClient.UsernameExistsAsync(username));
-                    PasswordBox.Focus();
+                    bool exists = await _apiClient.UsernameExistsAsync(username);
+                    SetUsernameChoice(exists ? true : null);
+                    if (exists) PasswordBox.Focus();
+                    else AuthErrorTextBlock.Text = Texts.T("LoginError");
                 }
                 catch (Exception ex)
                 {
@@ -386,6 +402,7 @@ namespace Client.Windows
                 RefreshTrustedRecipientsComboBox();
 
                 AuthScreen.Visibility = Visibility.Collapsed;
+                Title = "NOX | End-to-End Encrypted File Transfer";
                 MainShell.Visibility = Visibility.Visible;
                 ApplyScaledWindowSize(DashboardDesignWidth, DashboardDesignHeight);
 
@@ -418,7 +435,11 @@ namespace Client.Windows
 
         private void SetLoginInputsBusy(bool busy)
         {
-            SignInButton.IsEnabled = ServerSchemeBox.IsEnabled = !busy;
+            _authRequestBusy = busy;
+            if (busy) StopAuthWindowAnimation();
+            if (!busy) RequestAuthWindowResize(true);
+            SignInButton.IsEnabled = ServerSchemeBox.IsEnabled = ChangeServerButton.IsEnabled =
+                SwitchAuthModeButton.IsEnabled = !busy;
             ServerUrlTextBox.IsReadOnly = UsernameTextBox.IsReadOnly = busy;
             PasswordBox.IsEnabled = !busy && _usernameExists.HasValue;
             UpdateRegistrationHint();
@@ -426,18 +447,40 @@ namespace Client.Windows
 
         private void SetUsernameChoice(bool? exists)
         {
+            if (_usernameExists != exists) PrepareAuthTransition();
             _usernameExists = exists;
             PasswordBox.Clear();
             PasswordLabelTextBlock.Visibility = PasswordBox.Visibility = exists.HasValue ? Visibility.Visible : Visibility.Collapsed;
             PasswordBox.IsEnabled = exists.HasValue;
             SignInButton.Visibility = exists == false ? Visibility.Collapsed : Visibility.Visible;
             CreateAccountButton.Visibility = exists == false ? Visibility.Visible : Visibility.Collapsed;
-            SignInButton.IsDefault = _isServerConnectionVerified && exists != false;
+            CreateAccountButton.IsDefault = exists == false;
+            SwitchAuthModeButton.Visibility = _isServerConnectionVerified ? Visibility.Visible : Visibility.Collapsed;
+            SwitchAuthModeLabel.SetResourceReference(TextBlock.TextProperty,
+                exists == false ? "NoxText.AlreadyHaveAccount" : "NoxText.NoAccount");
+            AuthHeading.SetResourceReference(TextBlock.TextProperty, !_isServerConnectionVerified
+                ? "NoxText.Server" : exists == false ? "NoxText.Registration" : "NoxText.SignInAlt");
+            SignInButton.IsDefault = exists != false;
             SignInButton.Content = !_isServerConnectionVerified ? Texts.T("Connect") : exists == true ? Texts.T("SignIn") : Texts.T("Continue");
             UpdateRegistrationHint();
+            QueuePasswordStrength();
         }
 
-        private void RegistrationPassword_Changed(object sender, RoutedEventArgs e) => UpdateRegistrationHint();
+        private void SwitchAuthMode_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_isServerConnectionVerified || !SwitchAuthModeButton.IsEnabled) return;
+            SetUsernameChoice(_usernameExists == false ? null : false);
+            AuthErrorTextBlock.Text = string.Empty;
+            if (string.IsNullOrWhiteSpace(UsernameTextBox.Text) || _usernameExists is null)
+                UsernameTextBox.Focus();
+            else PasswordBox.Focus();
+        }
+
+        private void RegistrationPassword_Changed(object sender, RoutedEventArgs e)
+        {
+            UpdateRegistrationHint();
+            QueuePasswordStrength();
+        }
 
         private void UpdateRegistrationHint()
         {
@@ -480,12 +523,15 @@ namespace Client.Windows
             {
                 await _apiClient.CheckHealthAsync(serverUrl);
                 SaveRememberedServerIfRequested(serverUrl);
+                PrepareAuthTransition();
                 _isServerConnectionVerified = true;
                 UsernameTextBox.IsEnabled = true;
                 UsernameLabelTextBlock.Visibility = UsernameTextBox.Visibility = Visibility.Visible;
                 SetUsernameChoice(null);
-                ServerStatusLabel.Text = Texts.T("Connected");
-                ServerOnlineIndicator.Fill = System.Windows.Media.Brushes.LightGreen;
+                AuthHeading.SetResourceReference(TextBlock.TextProperty, "NoxText.SignInAlt");
+                ConnectedServerUrl.Text = serverUrl;
+                ServerConnectionFields.Visibility = Visibility.Collapsed;
+                ConnectedServerSummary.Visibility = Visibility.Visible;
                 AuthErrorTextBlock.Text = ServerSchemeBox.SelectedIndex == 1
                     ? Texts.T("HTTPDoesNotEncryptCredentialsIn") : string.Empty;
                 UsernameTextBox.Focus();
@@ -496,10 +542,21 @@ namespace Client.Windows
                 AuthErrorTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
                 AuthErrorTextBlock.Text = GetUserFacingError(ex);
             }
-            finally { SetLoginInputsBusy(false); }
+            finally
+            {
+                if (!_isServerConnectionVerified)
+                    SignInButton.Content = Texts.T("Connect");
+                SetLoginInputsBusy(false);
+            }
         }
 
         private void ServerScheme_Changed(object sender, SelectionChangedEventArgs e) => ResetServerConnectionState();
+
+        private void ChangeServer_Click(object sender, RoutedEventArgs e)
+        {
+            ResetServerConnectionState();
+            ServerUrlTextBox.Focus();
+        }
 
         private void ServerUrlTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
@@ -520,7 +577,8 @@ namespace Client.Windows
         private void UsernameTextBox_Changed(object sender, TextChangedEventArgs e)
         {
             if (!_isServerConnectionVerified) return;
-            SetUsernameChoice(null);
+            if (_usernameExists != false) SetUsernameChoice(null);
+            else QueuePasswordStrength();
             AuthErrorTextBlock.Text = string.Empty;
         }
 
@@ -605,6 +663,12 @@ namespace Client.Windows
 
         private void ResetServerConnectionState()
         {
+            if (!_isServerConnectionVerified && UsernameTextBox?.Visibility != Visibility.Visible)
+            {
+                if (AuthErrorTextBlock != null) AuthErrorTextBlock.Text = string.Empty;
+                return;
+            }
+            PrepareAuthTransition();
             _isServerConnectionVerified = false;
 
             if (UsernameTextBox is null ||
@@ -612,20 +676,19 @@ namespace Client.Windows
                 UsernameLabelTextBlock is null ||
                 PasswordLabelTextBlock is null ||
                 CreateAccountButton is null ||
-                SignInButton is null ||
-                ServerOnlineIndicator is null)
+                SignInButton is null)
                 return;
 
             UsernameTextBox.IsEnabled = false;
+            AuthHeading.SetResourceReference(TextBlock.TextProperty, "NoxText.Server");
+            ServerConnectionFields.Visibility = Visibility.Visible;
+            ConnectedServerSummary.Visibility = Visibility.Collapsed;
+            ConnectedServerUrl.Text = string.Empty;
             UsernameLabelTextBlock.Visibility = Visibility.Collapsed;
             UsernameTextBox.Visibility = Visibility.Collapsed;
             SetUsernameChoice(null);
             _apiClient.ClearAuthentication();
-            ServerStatusLabel.Text = Texts.T("NotConnected");
             AuthErrorTextBlock.Text = string.Empty;
-            ServerOnlineIndicator.Visibility = Visibility.Visible;
-            ServerOnlineIndicator.Fill = new System.Windows.Media.SolidColorBrush(
-                System.Windows.Media.Color.FromRgb(255, 92, 92));
             SignInButton.Content = Texts.T("Connect");
         }
 
@@ -721,12 +784,21 @@ namespace Client.Windows
         {
             if (e.Key != System.Windows.Input.Key.Enter) return;
             e.Handled = true;
-            if (!e.IsRepeat && CheckRecipientButton.IsEnabled && !TrustedRecipientsComboBox.IsDropDownOpen)
+            if (!e.IsRepeat && !_recipientLocked && CheckRecipientButton.IsEnabled && !TrustedRecipientsComboBox.IsDropDownOpen)
                 CheckRecipientButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         }
 
         private async void CheckRecipientButton_Click(object sender, RoutedEventArgs e)
         {
+            // After a successful check the button becomes "edit": it only unlocks the recipient field.
+            if (_recipientLocked)
+            {
+                SetRecipientLocked(false);
+                RecipientUsernameTextBox.Focus();
+                RecipientUsernameTextBox.SelectAll();
+                return;
+            }
+
             int checkVersion = ++_recipientCheckVersion;
             _currentRecipientBundle = null;
             _recipientBundleMustBeRefreshed = false;
@@ -761,7 +833,7 @@ namespace Client.Windows
                 recipientUsername = GetRecipientUsername();
 
                 CheckRecipientButton.IsEnabled = false;
-                CheckRecipientButton.Content = Texts.T("CheckingAlt");
+                CheckRecipientButton.Content = "...";
 
                 PreKeyBundleResponse bundle = await _apiClient.GetPreKeyBundleAsync(recipientUsername);
                 if (checkVersion != _recipientCheckVersion ||
@@ -825,6 +897,7 @@ namespace Client.Windows
                 _currentRecipientBundle = bundle;
                 DropZoneBorder.IsEnabled = true;
                 DropZonePromptTextBlock.Text = DropZoneReadyText;
+                if (!IsSendToSelfEnabled()) SetRecipientLocked(true);
             }
             catch (Exception ex)
             {
@@ -838,6 +911,13 @@ namespace Client.Windows
             }
         }
 
+
+        private void SetRecipientLocked(bool locked)
+        {
+            _recipientLocked = locked;
+            RecipientUsernameTextBox.IsReadOnly = locked;
+            TrustedRecipientsComboBox.IsEnabled = !locked && !IsSendToSelfEnabled();
+        }
 
         private bool EnsureRecipientTrusted(
             PreKeyBundleResponse bundle,
@@ -1647,6 +1727,7 @@ namespace Client.Windows
 
         private void SetDownloadButtonEnabled(bool isEnabled)
         {
+            isEnabled &= !_isDownloading;
             DownloadDecryptButton.IsEnabled = isEnabled;
             ApplyActionButtonVisual(DownloadDecryptButton, isEnabled);
         }
@@ -1803,6 +1884,7 @@ namespace Client.Windows
         private async void SendToSelfCheckBox_Changed(object sender, RoutedEventArgs e)
         {
             bool sendToSelf = IsSendToSelfEnabled();
+            SetRecipientLocked(false);
 
             try
             {
@@ -2143,7 +2225,7 @@ namespace Client.Windows
                 }
 
                 SelectedFilesStatusTextBlock.Text =
-                    Texts.T("SentExpiresUTC", createTransferResponse.ExpiresAtUtc);
+                    Texts.T("SentExpires", TransferExpiryFormatter.Format(createTransferResponse.ExpiresAtUtc));
 
                 _selectedFilePaths.Clear();
                 SelectedFilesListBox.Items.Clear();
@@ -2201,6 +2283,7 @@ namespace Client.Windows
 
         private async void DownloadDecryptButton_Click(object sender, RoutedEventArgs e)
         {
+            if (_isDownloading) return;
             InboxStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
 
             if (_session is null)
@@ -2227,36 +2310,41 @@ namespace Client.Windows
                 return;
             }
 
-            string outputDirectory;
-
-            if (UseDefaultDownloadDirectoryCheckBox.IsChecked == true)
-            {
-                outputDirectory = GetDefaultDownloadDirectoryFromTextBox();
-
-                if (string.IsNullOrWhiteSpace(outputDirectory) || !Directory.Exists(outputDirectory))
-                {
-                    InboxStatusTextBlock.Text = Texts.T("InvalidDefaultFolderChooseAValid");
-                    return;
-                }
-            }
-            else
-            {
-                var folderDialog = new OpenFolderDialog
-                {
-                    Title = Texts.T("ChooseWhereToSaveTheDecrypted")
-                };
-
-                if (folderDialog.ShowDialog() != true)
-                    return;
-
-                outputDirectory = folderDialog.FolderName;
-            }
-
             TransferSummaryResponse selectedTransfer = _inboxTransfers[InboxListBox.SelectedIndex];
             ClientOneTimePreKeyState? transferOneTimePreKey = null;
+            _isDownloading = true;
+            ++_inboxRevision;
+            RefreshInboxButton.IsEnabled = false;
+            InboxListBox.IsEnabled = false;
+            SetDownloadButtonEnabled(false);
 
             try
             {
+                string outputDirectory;
+
+                if (UseDefaultDownloadDirectoryCheckBox.IsChecked == true)
+                {
+                    outputDirectory = GetDefaultDownloadDirectoryFromTextBox();
+
+                    if (string.IsNullOrWhiteSpace(outputDirectory) || !Directory.Exists(outputDirectory))
+                    {
+                        InboxStatusTextBlock.Text = Texts.T("InvalidDefaultFolderChooseAValid");
+                        return;
+                    }
+                }
+                else
+                {
+                    var folderDialog = new OpenFolderDialog
+                    {
+                        Title = Texts.T("ChooseWhereToSaveTheDecrypted")
+                    };
+
+                    if (folderDialog.ShowDialog() != true)
+                        return;
+
+                    outputDirectory = folderDialog.FolderName;
+                }
+
                 SetDownloadButtonEnabled(false);
                 DownloadDecryptButton.Content = Texts.T("Decrypting");
                 InboxStatusTextBlock.Foreground = System.Windows.Media.Brushes.LightGreen;
@@ -2380,7 +2468,7 @@ namespace Client.Windows
 
                 InboxStatusTextBlock.Text = Texts.T("FileDownloadedDecryptedAndRemovedFrom");
 
-                await RefreshInboxAsync();
+                await RefreshInboxAsync(allowDuringDownload: true);
             }
             catch (System.Security.Cryptography.AuthenticationTagMismatchException)
             {
@@ -2412,7 +2500,7 @@ namespace Client.Windows
                 ShowDataTamperingWarning(removedFromServer);
 
                 if (removedFromServer)
-                    await RefreshInboxAsync();
+                    await RefreshInboxAsync(allowDuringDownload: true);
             }
             catch (Exception ex)
             {
@@ -2421,6 +2509,9 @@ namespace Client.Windows
             }
             finally
             {
+                _isDownloading = false;
+                RefreshInboxButton.IsEnabled = !_isManualInboxRefresh;
+                InboxListBox.IsEnabled = true;
                 SetDownloadButtonEnabled(InboxListBox.SelectedIndex >= 0);
                 DownloadDecryptButton.Content = Texts.T("Download");
             }
@@ -2436,53 +2527,69 @@ namespace Client.Windows
             return vault.PreviousSignedPreKeys.SingleOrDefault(preKey => preKey.KeyId == keyId);
         }
 
-        private async Task RefreshInboxAsync()
+        private async Task RefreshInboxAsync(bool showUpdating = false, bool allowDuringDownload = false)
         {
-            if (_session is null)
+            await _inboxRefreshGate.WaitAsync();
+            try
             {
-                InboxStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
-                InboxStatusTextBlock.Text = Texts.T("SignInFirstAlt");
+                if (_isDownloading && !allowDuringDownload) return;
+                var session = _session;
+                int revision = _inboxRevision;
+                if (_session is null)
+                {
+                    InboxStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
+                    InboxStatusTextBlock.Text = Texts.T("SignInFirstAlt");
+                    UpdateInboxIndicator();
+                    return;
+                }
+
+                if (showUpdating)
+                {
+                    SetInboxUpdatingStatus();
+                    ResetProgress(InboxProgressBar);
+                }
+
+                List<TransferSummaryResponse> transfers = await _apiClient.GetInboxAsync();
+                // A response started before a download or logout must not replace its UI.
+                if (!ReferenceEquals(session, _session) || revision != _inboxRevision) return;
+                Guid? selectedTransferId = null;
+
+                if (InboxListBox.SelectedIndex >= 0 && InboxListBox.SelectedIndex < _inboxTransfers.Count)
+                    selectedTransferId = _inboxTransfers[InboxListBox.SelectedIndex].TransferId;
+
+                bool changed = !AreInboxTransfersEqual(_inboxTransfers, transfers);
+                if (changed)
+                {
+                    InboxListBox.Items.Clear();
+                    _inboxTransfers.Clear();
+
+                    foreach (TransferSummaryResponse transfer in transfers)
+                    {
+                        _inboxTransfers.Add(transfer);
+                        InboxListBox.Items.Add(FormatInboxTransfer(transfer));
+                    }
+
+                    if (selectedTransferId is Guid transferId)
+                    {
+                        int restoredIndex = _inboxTransfers.FindIndex(transfer => transfer.TransferId == transferId);
+                        if (restoredIndex >= 0)
+                            InboxListBox.SelectedIndex = restoredIndex;
+                    }
+                }
+
+                SetDownloadButtonEnabled(InboxListBox.SelectedIndex >= 0);
+                if (showUpdating || (changed && !_isDownloading))
+                {
+                    InboxStatusTextBlock.Foreground = System.Windows.Media.Brushes.LightGreen;
+                    InboxStatusTextBlock.Text = transfers.Count == 0
+                        ? string.Empty
+                        : transfers.Count == 1
+                            ? Texts.T("1PendingTransfer")
+                            : Texts.T("PendingTransfers", transfers.Count);
+                }
                 UpdateInboxIndicator();
-                return;
             }
-
-            SetInboxUpdatingStatus();
-            ResetProgress(InboxProgressBar);
-
-            List<TransferSummaryResponse> transfers = await _apiClient.GetInboxAsync();
-            Guid? selectedTransferId = null;
-
-            if (InboxListBox.SelectedIndex >= 0 && InboxListBox.SelectedIndex < _inboxTransfers.Count)
-                selectedTransferId = _inboxTransfers[InboxListBox.SelectedIndex].TransferId;
-
-            if (!AreInboxTransfersEqual(_inboxTransfers, transfers))
-            {
-                InboxListBox.Items.Clear();
-                _inboxTransfers.Clear();
-
-                foreach (TransferSummaryResponse transfer in transfers)
-                {
-                    _inboxTransfers.Add(transfer);
-
-                    InboxListBox.Items.Add(FormatInboxTransfer(transfer));
-                }
-
-                if (selectedTransferId is Guid transferId)
-                {
-                    int restoredIndex = _inboxTransfers.FindIndex(transfer => transfer.TransferId == transferId);
-                    if (restoredIndex >= 0)
-                        InboxListBox.SelectedIndex = restoredIndex;
-                }
-            }
-
-            SetDownloadButtonEnabled(InboxListBox.SelectedIndex >= 0);
-            InboxStatusTextBlock.Foreground = System.Windows.Media.Brushes.LightGreen;
-            InboxStatusTextBlock.Text = transfers.Count == 0
-                ? string.Empty
-                : transfers.Count == 1
-                    ? Texts.T("1PendingTransfer")
-                    : Texts.T("PendingTransfers", transfers.Count);
-            UpdateInboxIndicator();
+            finally { _inboxRefreshGate.Release(); }
         }
 
         private void SetInboxUpdatingStatus()
@@ -2533,7 +2640,8 @@ namespace Client.Windows
                     ? Texts.T("MeAlt")
                     : transfer.SenderUsername;
 
-            return Texts.T("FileSExpiresUTC", senderDisplayName, transfer.FileCount, transfer.ExpiresAtUtc);
+            return Texts.T("FileSExpires", senderDisplayName, transfer.FileCount,
+                TransferExpiryFormatter.Format(transfer.ExpiresAtUtc));
         }
 
         private static string FormatFileSize(long bytes)
@@ -2556,21 +2664,27 @@ namespace Client.Windows
 
         private async void RefreshInboxButton_Click(object sender, RoutedEventArgs e)
         {
+            if (_isDownloading || _isManualInboxRefresh) return;
+            var session = _session;
+            int revision = _inboxRevision;
+            _isManualInboxRefresh = true;
             try
             {
                 RefreshInboxButton.IsEnabled = false;
                 RefreshInboxButton.Content = Texts.T("RefreshingAlt");
 
-                await RefreshInboxAsync();
+                await RefreshInboxAsync(showUpdating: true);
             }
             catch (Exception ex)
             {
+                if (_isDownloading || _session is null || !ReferenceEquals(session, _session) || revision != _inboxRevision) return;
                 InboxStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
                 InboxStatusTextBlock.Text = GetUserFacingError(ex);
             }
             finally
             {
-                RefreshInboxButton.IsEnabled = true;
+                _isManualInboxRefresh = false;
+                RefreshInboxButton.IsEnabled = !_isDownloading;
                 RefreshInboxButton.Content = Texts.T("Refresh");
             }
         }
@@ -2590,12 +2704,14 @@ namespace Client.Windows
 
         private void Logout()
         {
+            ++_inboxRevision;
             _inboxPollingTimer.Stop();
             _isInboxPollingRefreshRunning = false;
 
             _session = null;
             WorkspaceTabs.SelectedIndex = 0;
-            IdentityUsername.Text = IdentityFingerprint.Text = ContactsStatus.Text = string.Empty;
+            IdentityUsername.Text = ContactsStatus.Text = string.Empty;
+            IdentityFingerprint.ItemsSource = null;
             TrustedContactsListBox.Items.Clear();
             _sessionPassword = null;
             _vault = null;
@@ -2606,6 +2722,7 @@ namespace Client.Windows
             _apiClient.ClearAuthentication();
 
             SignedInUserTextBlock.Text = string.Empty;
+            SetRecipientLocked(false);
             RecipientUsernameTextBox.Text = string.Empty;
             ApplyRecipientPlaceholderIfEmpty();
             RecipientStatusTextBlock.Text = string.Empty;
@@ -2632,7 +2749,8 @@ namespace Client.Windows
 
             MainShell.Visibility = Visibility.Collapsed;
             AuthScreen.Visibility = Visibility.Visible;
-            ApplyScaledWindowSize(AuthDesignWidth, AuthDesignHeight);
+            SetResourceReference(TitleProperty, "NoxText.EndToEndEncryptedFileTransfer");
+            ResizeAuthWindow(false);
         }
 
         private sealed record ContactRow(string Username, string[] Groups);
@@ -2643,7 +2761,7 @@ namespace Client.Windows
             if (IdentityTab.IsSelected)
             {
                 IdentityUsername.Text = _session.Username;
-                IdentityFingerprint.Text = FormatFingerprintRows(OwnFingerprint());
+                IdentityFingerprint.ItemsSource = OwnFingerprint().Split(' ', StringSplitOptions.RemoveEmptyEntries);
             }
             else if (ContactsTab.IsSelected) RefreshTrustedContactsList();
         }
@@ -2708,6 +2826,7 @@ namespace Client.Windows
                 ++_recipientCheckVersion;
                 _currentRecipientBundle = null;
                 _recipientBundleMustBeRefreshed = false;
+                SetRecipientLocked(false);
                 RecipientUsernameTextBox.Clear();
                 ApplyRecipientPlaceholderIfEmpty();
                 RecipientStatusTextBlock.Text = string.Empty;

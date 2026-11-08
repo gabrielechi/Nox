@@ -48,13 +48,17 @@ internal static class WindowLayout
     }
 
     public static Size WorkSize(Window window)
+        => WorkBounds(window).Size;
+
+    public static Rect WorkBounds(Window window)
     {
         IntPtr hwnd = new WindowInteropHelper(window).Handle;
         var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
         if (hwnd == IntPtr.Zero || !GetMonitorInfo(MonitorFromWindow(hwnd, 2), ref info))
-            return SystemParameters.WorkArea.Size;
+            return SystemParameters.WorkArea;
         var dpi = VisualTreeHelper.GetDpi(window);
-        return new Size((info.Work.Right - info.Work.Left) / dpi.DpiScaleX,
+        return new Rect(info.Work.Left / dpi.DpiScaleX, info.Work.Top / dpi.DpiScaleY,
+                        (info.Work.Right - info.Work.Left) / dpi.DpiScaleX,
                         (info.Work.Bottom - info.Work.Top) / dpi.DpiScaleY);
     }
 
