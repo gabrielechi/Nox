@@ -5,7 +5,7 @@
 
 | Tipo | File | OS | Version | Link |
 | :--- | :--- | :--- | :--- | :--- |
-| **Client** | `NOX-Setup-3.1.exe` | Windows | 3.1 | [Download](https://github.com/gabrielechi/Nox/releases/download/v.3.1/NOX-Setup-3.1.exe) |
+| **Client** | `NOX-Setup-3.2.exe` | Windows | 3.2 | [Download](https://github.com/gabrielechi/Nox/releases/download/v.3.2/NOX-Setup-3.2.exe) |
 | **Server** | `LinuxServer.zip` | Linux | 2.0 | [Download](https://github.com/gabrielechi/Nox/releases/download/v.2.0/LinuxServer.zip) |
 | **Server** | `WinServer.zip` | Windows | 2.0 |  [Download](https://github.com/gabrielechi/Nox/releases/download/v.2.0/WinServer.zip)|
 
