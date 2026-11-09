@@ -1,0 +1,57 @@
+<Window x:Class="Client.Windows.Views.UpdateDialog" x:ClassModifier="internal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{DynamicResource NoxText.UpdateAvailableTitle}"
+        Width="460" SizeToContent="Height"
+        WindowStyle="None" AllowsTransparency="True" ResizeMode="NoResize"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        Background="Transparent"
+        FontFamily="{StaticResource NoxFontFamily}" FontSize="14"
+        Foreground="{StaticResource TextPrimaryBrush}"
+        PreviewKeyDown="Window_PreviewKeyDown">
+
+    <Border x:Name="Frame" Margin="8" Padding="24" CornerRadius="16" BorderThickness="1"
+            Background="{StaticResource NoxCardBrush}" BorderBrush="{StaticResource NoxBorderStrongBrush}"
+            MouseLeftButtonDown="Frame_MouseLeftButtonDown">
+        <StackPanel>
+            <DockPanel>
+                <Border Width="40" Height="40" CornerRadius="20" Margin="0,0,14,0" VerticalAlignment="Center"
+                        Background="{StaticResource NoxAccentMutedBrush}">
+                    <Viewbox Width="20" Height="20">
+                        <Path Style="{StaticResource NoxIconPath}" Data="{StaticResource NoxIconArrowDown}"
+                              Stroke="{StaticResource NoxAccentBrush}"/>
+                    </Viewbox>
+                </Border>
+                <TextBlock Text="{DynamicResource NoxText.UpdateAvailableTitle}" Style="{StaticResource NoxSectionTitleText}"
+                           FontSize="20" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            </DockPanel>
+
+            <TextBlock x:Name="MessageText" Margin="0,16,0,0" TextWrapping="Wrap" LineHeight="20"
+                       Foreground="{StaticResource NoxTextMutedBrush}"/>
+
+            <!-- Download state -->
+            <StackPanel x:Name="ProgressPanel" Margin="0,18,0,0" Visibility="Collapsed">
+                <ProgressBar x:Name="DownloadProgress" Height="8" Minimum="0" Maximum="100" Value="0"
+                             AutomationProperties.LiveSetting="Polite"/>
+                <TextBlock x:Name="ProgressText" Margin="0,8,0,0" Style="{StaticResource NoxLabelText}"
+                           AutomationProperties.LiveSetting="Polite"/>
+            </StackPanel>
+
+            <TextBlock x:Name="ErrorText" Margin="0,14,0,0" TextWrapping="Wrap" Visibility="Collapsed"
+                       Foreground="{StaticResource NoxWarningBrush}" AutomationProperties.LiveSetting="Assertive"/>
+
+            <CheckBox x:Name="DontShowAgainCheckBox" Margin="0,18,0,0" HorizontalAlignment="Left"
+                      Foreground="{StaticResource NoxTextMutedBrush}"
+                      Content="{DynamicResource NoxText.UpdateDontShowAgain}"/>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0">
+                <Button x:Name="LaterButton" MinWidth="120" Height="46"
+                        Content="{DynamicResource NoxText.UpdateLater}" Click="LaterButton_Click"/>
+                <Button x:Name="UpdateButton" MinWidth="140" Margin="10,0,0,0" IsDefault="True"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        Content="{DynamicResource NoxText.UpdateNow}" Click="UpdateButton_Click"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

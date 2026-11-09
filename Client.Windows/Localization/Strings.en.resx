@@ -230,4 +230,15 @@ Fingerprint published by the server:
   <data name="TamperedNotConfirmed" xml:space="preserve"><value>For your protection, the file was discarded locally. Server deletion could not be confirmed. Try again when the connection is available.</value></data>
   <data name="OperationUnavailable"><value>This operation cannot be completed in the current state.</value></data>
   <data name="InvalidOperationData"><value>The data supplied for this operation is invalid.</value></data>
+  <data name="UpdateAvailableTitle" xml:space="preserve"><value>New version available</value></data>
+  <data name="UpdateAvailableMessage" xml:space="preserve"><value>NOX {0} is available (installed: {1}). Update now?</value></data>
+  <data name="UpdateDontShowAgain" xml:space="preserve"><value>Don't show again for this version</value></data>
+  <data name="UpdateLater" xml:space="preserve"><value>Later</value></data>
+  <data name="UpdateNow" xml:space="preserve"><value>Update</value></data>
+  <data name="UpdateDownloading" xml:space="preserve"><value>Downloading update... {0}%</value></data>
+  <data name="UpdateStartingInstaller" xml:space="preserve"><value>Download complete and verified. Starting the installer...</value></data>
+  <data name="UpdateDownloadFailed" xml:space="preserve"><value>Download failed. Check your connection and try again.</value></data>
+  <data name="UpdateIntegrityFailed" xml:space="preserve"><value>The downloaded file does not match the published one and was deleted. Update cancelled.</value></data>
+  <data name="UpdateInstallerStartFailed" xml:space="preserve"><value>The installer could not be started.</value></data>
+  <data name="UpdateVersionTooltip" xml:space="preserve"><value>New version available: {0}. Click to update.</value></data>
 </root>

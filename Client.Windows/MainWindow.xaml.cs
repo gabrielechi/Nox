@@ -110,6 +110,8 @@ namespace Client.Windows
             _suppressRememberServerChange = false;
             InitializeAuthWindowLayout();
             InitializePasswordStrength();
+            InitializeUpdateCheck();
+            InitializeAccountMenu();
         }
 
         private void MainWindow_SourceInitialized(object? sender, EventArgs e)
@@ -226,6 +228,7 @@ namespace Client.Windows
                 }
             UpdateRegistrationHint();
             UpdatePasswordStrengthVisuals();
+            ShowUpdateOnVersionLabel();
             int selection = InboxListBox.SelectedIndex;
             for (int i = 0; i < _inboxTransfers.Count; i++) InboxListBox.Items[i] = FormatInboxTransfer(_inboxTransfers[i]);
             InboxListBox.SelectedIndex = selection;
@@ -398,7 +401,7 @@ namespace Client.Windows
 
                 CurrentUserResponse currentUser = await _apiClient.GetCurrentUserAsync();
 
-                SignedInUserTextBlock.Text = Texts.T("Hello", currentUser.Username);
+                SignedInUserTextBlock.Text = currentUser.Username;
                 RefreshTrustedRecipientsComboBox();
 
                 AuthScreen.Visibility = Visibility.Collapsed;

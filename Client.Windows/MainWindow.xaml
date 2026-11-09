@@ -964,41 +964,146 @@
                            Foreground="{StaticResource TextPrimaryBrush}"/>
             </StackPanel>
 
-            <!-- Sidebar footer: language, logout and signed-in user.
-                 Code-behind may move HeaderActions inside this 2x2 grid (compact layout). -->
+            <!-- Sidebar footer: account card. Hovering it (or moving keyboard focus inside) expands an
+                 account menu above the user name with the language choice and Logout.
+                 Code-behind may set Grid attached properties on HeaderActions (compact layout): harmless here. -->
             <Grid x:Name="DashboardHeader" Grid.Column="0" VerticalAlignment="Bottom" Margin="16,0,16,20">
-                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
-                <Border Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" Padding="12" CornerRadius="12" BorderThickness="1"
-                        Background="{StaticResource NoxCardHoverBrush}" BorderBrush="{StaticResource NoxBorderBrush}">
+                <Border x:Name="AccountCard" Padding="8" CornerRadius="12" BorderThickness="1" Background="{StaticResource NoxCardHoverBrush}">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="BorderBrush" Value="{StaticResource NoxBorderBrush}"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="BorderBrush" Value="{StaticResource NoxBorderStrongBrush}"/>
+                                </Trigger>
+                                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                    <Setter Property="BorderBrush" Value="{StaticResource NoxBorderStrongBrush}"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
                     <Grid>
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
-                        <Border Width="32" Height="32" CornerRadius="16" Background="{StaticResource NoxAccentMutedBrush}" VerticalAlignment="Center">
-                            <Viewbox Width="16" Height="16">
-                                <Path Style="{StaticResource NoxIconPath}" Data="{StaticResource NoxIconUser}" Stroke="{StaticResource NoxAccentBrush}"/>
-                            </Viewbox>
-                        </Border>
-                        <TextBlock Grid.Column="1" x:Name="SignedInUserTextBlock" Margin="10,0,0,0" FontSize="14" FontWeight="SemiBold"
-                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <StackPanel>
+                            <!-- Account menu: collapsed to zero height; MainWindow.AccountMenu.cs opens it on hover
+                                 or keyboard focus (a single state, so animations never fight each other). -->
+                            <Border x:Name="AccountMenu" Opacity="0">
+                                <Border.LayoutTransform>
+                                    <ScaleTransform ScaleY="0"/>
+                                </Border.LayoutTransform>
+
+                                <StackPanel x:Name="HeaderActions" Orientation="Vertical">
+                                    <!-- Language -->
+                                    <StackPanel Orientation="Horizontal" Margin="8,2,0,6">
+                                        <Viewbox Width="14" Height="14" VerticalAlignment="Center" Margin="0,0,8,0">
+                                            <Path Style="{StaticResource NoxIconPath}" Data="{StaticResource NoxIconGlobe}"/>
+                                        </Viewbox>
+                                        <TextBlock Text="{DynamicResource NoxText.Language}" Style="{StaticResource NoxLabelText}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <!-- Same ComboBox as before (selection + Language_Changed); drawn as an inline list. -->
+                                    <ComboBox x:Name="DashboardLanguageBox" FocusVisualStyle="{StaticResource NoxFocusVisual}"
+                                              SelectedValuePath="Tag" SelectionChanged="Language_Changed" AutomationProperties.Name="{DynamicResource NoxText.Language}">
+                                        <ComboBox.Template>
+                                            <ControlTemplate TargetType="ComboBox">
+                                                <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                            </ControlTemplate>
+                                        </ComboBox.Template>
+                                        <ComboBox.ItemContainerStyle>
+                                            <Style TargetType="ComboBoxItem">
+                                                <Setter Property="Foreground" Value="{StaticResource NoxTextMutedBrush}"/>
+                                                <Setter Property="Cursor" Value="Hand"/>
+                                                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="ComboBoxItem">
+                                                            <Grid x:Name="Root" Height="36" Background="Transparent">
+                                                                <Border x:Name="Hover" CornerRadius="8" Opacity="0" Background="{StaticResource NoxRaisedBrush}"/>
+                                                                <DockPanel Margin="8,0">
+                                                                    <!-- Small vector flag, chosen by the item's Tag -->
+                                                                    <Grid Width="18" Height="12" VerticalAlignment="Center" Margin="0,0,10,0">
+                                                                        <Canvas x:Name="FlagIt" Width="18" Height="12" Visibility="Collapsed">
+                                                                            <Canvas.Clip><RectangleGeometry Rect="0,0,18,12" RadiusX="2" RadiusY="2"/></Canvas.Clip>
+                                                                            <Rectangle Width="6" Height="12" Fill="#009246"/>
+                                                                            <Rectangle Canvas.Left="6" Width="6" Height="12" Fill="#F1F2F1"/>
+                                                                            <Rectangle Canvas.Left="12" Width="6" Height="12" Fill="#CE2B37"/>
+                                                                        </Canvas>
+                                                                        <Canvas x:Name="FlagEn" Width="18" Height="12" Visibility="Collapsed">
+                                                                            <Canvas.Clip><RectangleGeometry Rect="0,0,18,12" RadiusX="2" RadiusY="2"/></Canvas.Clip>
+                                                                            <Rectangle Width="18" Height="12" Fill="#012169"/>
+                                                                            <Path Data="M0,0 L18,12 M18,0 L0,12" Stroke="#FFFFFF" StrokeThickness="2.4"/>
+                                                                            <Path Data="M0,0 L18,12 M18,0 L0,12" Stroke="#C8102E" StrokeThickness="0.8"/>
+                                                                            <Path Data="M9,0 V12 M0,6 H18" Stroke="#FFFFFF" StrokeThickness="3.6"/>
+                                                                            <Path Data="M9,0 V12 M0,6 H18" Stroke="#C8102E" StrokeThickness="2"/>
+                                                                        </Canvas>
+                                                                        <Border CornerRadius="2" BorderThickness="1" BorderBrush="#33FFFFFF"/>
+                                                                    </Grid>
+                                                                    <Viewbox x:Name="Check" DockPanel.Dock="Right" Width="14" Height="14" Visibility="Hidden">
+                                                                        <Path Style="{StaticResource NoxIconPath}" Data="{StaticResource NoxIconCheck}"
+                                                                              StrokeThickness="2.5" Stroke="{StaticResource NoxAccentBrush}"/>
+                                                                    </Viewbox>
+                                                                    <ContentPresenter VerticalAlignment="Center"/>
+                                                                </DockPanel>
+                                                            </Grid>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="Tag" Value="it">
+                                                                    <Setter TargetName="FlagIt" Property="Visibility" Value="Visible"/>
+                                                                </Trigger>
+                                                                <Trigger Property="Tag" Value="en">
+                                                                    <Setter TargetName="FlagEn" Property="Visibility" Value="Visible"/>
+                                                                </Trigger>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="Hover" Property="Opacity" Value="1"/>
+                                                                    <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+                                                                </Trigger>
+                                                                <Trigger Property="IsSelected" Value="True">
+                                                                    <Setter TargetName="Check" Property="Visibility" Value="Visible"/>
+                                                                    <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+                                                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </ComboBox.ItemContainerStyle>
+                                        <ComboBoxItem Tag="it" Content="Italiano"/><ComboBoxItem Tag="en" Content="English"/>
+                                    </ComboBox>
+
+                                    <Border Height="1" Margin="0,8" Background="{StaticResource NoxBorderBrush}"/>
+
+                                    <Button x:Name="LogoutButton" Click="LogoutButton_Click" Style="{StaticResource SidebarButtonStyle}"
+                                            Height="40" MinHeight="0" Margin="0" Padding="8,0" AutomationProperties.Name="{DynamicResource NoxText.Logout}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Viewbox Width="18" Height="18" VerticalAlignment="Center">
+                                                <Path Style="{StaticResource NoxIconPath}" Data="{StaticResource NoxIconSignOut}"
+                                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                            </Viewbox>
+                                            <TextBlock Text="{DynamicResource NoxText.Logout}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                        </StackPanel>
+                                    </Button>
+
+                                    <Border Height="1" Margin="0,8,0,8" Background="{StaticResource NoxBorderBrush}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Signed-in user -->
+                            <Grid Margin="4">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <Border Width="32" Height="32" CornerRadius="16" Background="{StaticResource NoxAccentMutedBrush}" VerticalAlignment="Center">
+                                    <Viewbox Width="16" Height="16">
+                                        <Path Style="{StaticResource NoxIconPath}" Data="{StaticResource NoxIconUser}" Stroke="{StaticResource NoxAccentBrush}"/>
+                                    </Viewbox>
+                                </Border>
+                                <TextBlock Grid.Column="1" x:Name="SignedInUserTextBlock" Margin="10,0,8,0" FontSize="14" FontWeight="SemiBold"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                <!-- Chevron: points up when the menu is closed, down when it is open -->
+                                <Viewbox x:Name="AccountChevron" Grid.Column="2" Width="14" Height="14" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                    <Viewbox.RenderTransform><RotateTransform Angle="180"/></Viewbox.RenderTransform>
+                                    <Path Style="{StaticResource NoxIconPath}" Data="{StaticResource NoxIconChevronDown}" StrokeThickness="2.2"/>
+                                </Viewbox>
+                            </Grid>
+                        </StackPanel>
                     </Grid>
                 </Border>
-                <StackPanel Grid.Column="1" x:Name="HeaderActions" Orientation="Vertical">
-                    <ComboBox x:Name="DashboardLanguageBox" Style="{StaticResource SelectorStyle}" Height="44" Margin="0,0,0,4"
-                              Background="Transparent" BorderThickness="0" Foreground="{StaticResource TextMutedBrush}"
-                                  SelectedValuePath="Tag" SelectionChanged="Language_Changed" AutomationProperties.Name="{DynamicResource NoxText.Language}">
-                        <ComboBoxItem Tag="it" Content="Italiano"/><ComboBoxItem Tag="en" Content="English"/>
-                    </ComboBox>
-                    <Button x:Name="LogoutButton" Click="LogoutButton_Click" Style="{StaticResource SidebarButtonStyle}"
-                            Height="44" Margin="0" AutomationProperties.Name="{DynamicResource NoxText.Logout}">
-                        <StackPanel Orientation="Horizontal">
-                            <Viewbox Width="18" Height="18" VerticalAlignment="Center">
-                                <Path Style="{StaticResource NoxIconPath}" Data="{StaticResource NoxIconSignOut}"
-                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
-                            </Viewbox>
-                            <TextBlock Text="{DynamicResource NoxText.Logout}" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
             </Grid>
         </Grid>
     </Grid>
