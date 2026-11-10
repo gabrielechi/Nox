@@ -18,16 +18,25 @@
 
 
     try {
-        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" -UserAgent $userAgent
+        $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases?per_page=30" -UserAgent $userAgent
     } catch {
         Write-Fail "Impossibile contattare GitHub: $($_.Exception.Message)"
         return
     }
 
-
-    $asset = $release.assets | Where-Object { $_.name -match '^NOX-Setup-[0-9A-Za-z.\-]+\.exe$' } | Select-Object -First 1
+    $release = $null
+    $asset = $null
+    foreach ($candidate in $releases) {
+        if ($candidate.draft -or $candidate.prerelease) { continue }
+        $found = $candidate.assets | Where-Object { $_.name -match '^NOX-Setup-[0-9A-Za-z.\-]+\.exe$' } | Select-Object -First 1
+        if ($found) {
+            $release = $candidate
+            $asset = $found
+            break
+        }
+    }
     if (-not $asset) {
-        Write-Fail "Nessun installer trovato nella release $($release.tag_name)."
+        Write-Fail 'Nessuna release pubblicata contiene l''installer di NOX per Windows.'
         return
     }
     if ($asset.browser_download_url -notlike "https://github.com/$repo/releases/download/*") {
