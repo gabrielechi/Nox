@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>NOX</string>
+    <key>CFBundleDisplayName</key>
+    <string>NOX</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.gabrielechi.nox</string>
+    <key>CFBundleExecutable</key>
+    <string>NOX</string>
+    <key>CFBundleIconFile</key>
+    <string>NOX.icns</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>__VERSION__</string>
+    <key>CFBundleVersion</key>
+    <string>__VERSION__</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
+    <key>LSArchitecturePriority</key>
+    <array>
+        <string>arm64</string>
+    </array>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSRequiresAquaSystemAppearance</key>
+    <false/>
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>NOX legge i file che scegli di inviare e salva quelli ricevuti.</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>NOX legge i file che scegli di inviare e salva quelli ricevuti.</string>
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>NOX legge i file che scegli di inviare e salva quelli ricevuti.</string>
+</dict>
+</plist>

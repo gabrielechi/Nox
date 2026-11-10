@@ -1,4 +1,6 @@
 <Solution>
+  <Project Path="Client.Core/Client.Core.csproj" />
+  <Project Path="Client.MacOS/Client.MacOS.csproj" />
   <Project Path="Client.Windows/Client.Windows.csproj" Id="3008076e-fc90-4216-8edf-71be2daba0c3" />
   <Project Path="CryptoEngine/CryptoEngine.csproj" />
   <Project Path="NoxSetup/NoxSetup.vdproj" Type="Installer">

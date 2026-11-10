@@ -1,0 +1,316 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- NOX dark theme on top of Fluent: same look as the WPF client (Themes/NoxTheme.xaml). -->
+
+    <Style Selector="Window">
+        <Setter Property="Background" Value="{StaticResource NoxWindowBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+        <Setter Property="FontFamily" Value="{StaticResource NoxFontFamily}"/>
+        <Setter Property="FontSize" Value="14"/>
+    </Style>
+
+    <!-- Text -->
+    <Style Selector="TextBlock.title">
+        <Setter Property="FontSize" Value="28"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+    </Style>
+    <Style Selector="TextBlock.section">
+        <Setter Property="FontSize" Value="16"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+    </Style>
+    <Style Selector="TextBlock.label">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxTextMutedBrush}"/>
+    </Style>
+    <Style Selector="TextBlock.muted">
+        <Setter Property="Foreground" Value="{StaticResource NoxTextMutedBrush}"/>
+    </Style>
+
+    <!-- Icons: stroked vector paths -->
+    <Style Selector="Path.icon">
+        <Setter Property="Stroke" Value="{StaticResource NoxTextMutedBrush}"/>
+        <Setter Property="StrokeThickness" Value="2"/>
+        <Setter Property="StrokeLineCap" Value="Round"/>
+        <Setter Property="StrokeJoin" Value="Round"/>
+        <Setter Property="Fill" Value="Transparent"/>
+    </Style>
+
+    <!-- Buttons: secondary (default) -->
+    <Style Selector="Button">
+        <Setter Property="Background" Value="{StaticResource NoxRaisedBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+        <Setter Property="CornerRadius" Value="10"/>
+        <Setter Property="MinHeight" Value="44"/>
+        <Setter Property="Padding" Value="16,0"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource NoxRaisedHoverBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxBorderStrongBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+    </Style>
+    <Style Selector="Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource NoxCardHoverBrush}"/>
+    </Style>
+    <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource NoxCardBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxBorderBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxTextDisabledBrush}"/>
+    </Style>
+    <Style Selector="Button:disabled Path.icon">
+        <Setter Property="Stroke" Value="{StaticResource NoxTextDisabledBrush}"/>
+    </Style>
+
+    <!-- Primary: mint with dark text -->
+    <Style Selector="Button.primary">
+        <Setter Property="Background" Value="{StaticResource NoxAccentBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxAccentBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxAccentForegroundBrush}"/>
+    </Style>
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource NoxPrimaryHoverBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxPrimaryHoverBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxAccentForegroundBrush}"/>
+    </Style>
+    <Style Selector="Button.primary:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource NoxPrimaryPressedBrush}"/>
+    </Style>
+    <Style Selector="Button.primary Path.icon">
+        <Setter Property="Stroke" Value="{StaticResource NoxAccentForegroundBrush}"/>
+    </Style>
+    <Style Selector="Button.primary:disabled Path.icon">
+        <Setter Property="Stroke" Value="{StaticResource NoxTextDisabledBrush}"/>
+    </Style>
+
+    <!-- Danger (identity replacement) -->
+    <Style Selector="Button.danger">
+        <Setter Property="Background" Value="#B93838"/>
+        <Setter Property="BorderBrush" Value="#B93838"/>
+        <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#CC4545"/>
+        <Setter Property="BorderBrush" Value="#CC4545"/>
+        <Setter Property="Foreground" Value="White"/>
+    </Style>
+
+    <!-- Amber pencil: the recipient is verified and locked -->
+    <Style Selector="Button.edit">
+        <Setter Property="Background" Value="{StaticResource NoxCardBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxWarningBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxWarningBrush}"/>
+    </Style>
+    <Style Selector="Button.edit:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#2A2416"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxWarningBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxWarningBrush}"/>
+    </Style>
+    <Style Selector="Button.edit Path.icon">
+        <Setter Property="Stroke" Value="{StaticResource NoxWarningBrush}"/>
+    </Style>
+
+    <!-- Icon-only and link buttons -->
+    <Style Selector="Button.iconButton">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="MinHeight" Value="0"/>
+        <Setter Property="Padding" Value="0"/>
+    </Style>
+    <Style Selector="Button.iconButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource NoxRaisedBrush}"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+    <Style Selector="Button.iconButton:disabled /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+    <Style Selector="Button.iconButton:pointerover Path.icon">
+        <Setter Property="Stroke" Value="{StaticResource NoxTextBrush}"/>
+    </Style>
+    <Style Selector="Button.link">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="MinHeight" Value="24"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="FontWeight" Value="Normal"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxTextMutedBrush}"/>
+    </Style>
+    <Style Selector="Button.link:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+    </Style>
+
+    <!-- Sidebar navigation and account menu entries -->
+    <Style Selector="Button.nav, Button.menu">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxTextMutedBrush}"/>
+        <Setter Property="FontWeight" Value="Normal"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        <Setter Property="Padding" Value="12,0"/>
+        <Setter Property="Margin" Value="0,0,0,4"/>
+    </Style>
+    <Style Selector="Button.menu">
+        <Setter Property="MinHeight" Value="36"/>
+        <Setter Property="Margin" Value="0"/>
+        <Setter Property="Padding" Value="8,0"/>
+        <Setter Property="CornerRadius" Value="8"/>
+    </Style>
+    <Style Selector="Button.nav:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.menu:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource NoxCardHoverBrush}"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+    </Style>
+    <Style Selector="Button.nav.selected">
+        <Setter Property="Background" Value="{StaticResource NoxRaisedBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Button.nav.selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource NoxRaisedBrush}"/>
+    </Style>
+    <Style Selector="Button.nav Path.icon">
+        <Setter Property="Stroke" Value="{Binding $parent[Button].Foreground}"/>
+    </Style>
+    <Style Selector="Button.nav.selected Path.icon">
+        <Setter Property="Stroke" Value="{StaticResource NoxAccentBrush}"/>
+    </Style>
+    <Style Selector="Button.menu.selected">
+        <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
+    <!-- Text boxes -->
+    <Style Selector="TextBox">
+        <Setter Property="Background" Value="{StaticResource NoxRaisedBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+        <Setter Property="CaretBrush" Value="{StaticResource NoxAccentBrush}"/>
+        <Setter Property="SelectionBrush" Value="{StaticResource NoxSelectionBrush}"/>
+        <Setter Property="CornerRadius" Value="10"/>
+        <Setter Property="MinHeight" Value="46"/>
+        <Setter Property="Padding" Value="14,0"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="FontSize" Value="14"/>
+    </Style>
+    <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="{StaticResource NoxRaisedHoverBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxBorderStrongBrush}"/>
+    </Style>
+    <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="{StaticResource NoxRaisedBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxAccentBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+    <Style Selector="TextBox:pointerover, TextBox:focus">
+        <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+    </Style>
+    <Style Selector="TextBox:disabled /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="{StaticResource NoxCardBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxBorderBrush}"/>
+    </Style>
+    <Style Selector="TextBox:disabled">
+        <Setter Property="Foreground" Value="{StaticResource NoxTextMutedBrush}"/>
+    </Style>
+    <Style Selector="TextBox /template/ TextBlock#PART_Watermark">
+        <Setter Property="Foreground" Value="{StaticResource NoxTextDisabledBrush}"/>
+    </Style>
+    <!-- Recipient locked after a successful check: drawn on the sidebar colour. -->
+    <Style Selector="TextBox.locked /template/ Border#PART_BorderElement, TextBox.locked:pointerover /template/ Border#PART_BorderElement, TextBox.locked:focus /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="{StaticResource NoxSidebarBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxBorderBrush}"/>
+    </Style>
+
+    <!-- Combo boxes -->
+    <Style Selector="ComboBox">
+        <Setter Property="Background" Value="{StaticResource NoxRaisedBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxBorderBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+        <Setter Property="CornerRadius" Value="10"/>
+        <Setter Property="MinHeight" Value="46"/>
+        <Setter Property="Padding" Value="14,0,8,0"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="ComboBox:pointerover /template/ Border#Background">
+        <Setter Property="Background" Value="{StaticResource NoxRaisedHoverBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxBorderStrongBrush}"/>
+    </Style>
+
+    <!-- Check boxes -->
+    <Style Selector="CheckBox">
+        <Setter Property="Foreground" Value="{StaticResource NoxTextMutedBrush}"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="CheckBox:pointerover /template/ ContentPresenter#ContentPresenter">
+        <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+    </Style>
+    <Style Selector="CheckBox /template/ Border#NormalRectangle">
+        <Setter Property="CornerRadius" Value="5"/>
+    </Style>
+
+    <!-- Progress bars -->
+    <Style Selector="ProgressBar">
+        <Setter Property="Background" Value="{StaticResource NoxRaisedBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxAccentBrush}"/>
+        <Setter Property="MinHeight" Value="6"/>
+        <Setter Property="CornerRadius" Value="4"/>
+    </Style>
+
+    <!-- Lists of cards (inbox, contacts) -->
+    <Style Selector="ListBox.cards">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.cards ListBoxItem">
+        <Setter Property="Padding" Value="14,12"/>
+        <Setter Property="Margin" Value="0,0,0,8"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="Background" Value="{StaticResource NoxCardBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="ListBox.cards ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource NoxCardHoverBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxBorderStrongBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+    </Style>
+    <Style Selector="ListBox.cards ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBox.cards ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBox.cards ListBoxItem:selected:focus /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource NoxAccentSubtleBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxAccentBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+    </Style>
+    <Style Selector="ListBox.cards ListBoxItem:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource NoxCardHoverBrush}"/>
+    </Style>
+
+    <!-- Cards -->
+    <Style Selector="Border.card">
+        <Setter Property="Background" Value="{StaticResource NoxCardBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="14"/>
+    </Style>
+
+    <!-- Tooltips -->
+    <Style Selector="ToolTip">
+        <Setter Property="Background" Value="{StaticResource NoxRaisedBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource NoxBorderStrongBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+    </Style>
+</Styles>

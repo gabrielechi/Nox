@@ -1,0 +1,90 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- NOX palette and vector icons: same values as Client.Windows/Themes/NoxTheme.xaml. -->
+    <Color x:Key="NoxWindowColor">#0E1116</Color>
+    <Color x:Key="NoxSidebarColor">#12171D</Color>
+    <Color x:Key="NoxCardColor">#151A21</Color>
+    <Color x:Key="NoxCardHoverColor">#1A2028</Color>
+    <Color x:Key="NoxRaisedColor">#1E2630</Color>
+    <Color x:Key="NoxRaisedHoverColor">#252E3A</Color>
+    <Color x:Key="NoxBorderColor">#2A323D</Color>
+    <Color x:Key="NoxBorderStrongColor">#3A4553</Color>
+    <Color x:Key="NoxTextColor">#E8ECF2</Color>
+    <Color x:Key="NoxTextMutedColor">#9AA4B2</Color>
+    <Color x:Key="NoxTextDisabledColor">#5C6673</Color>
+    <Color x:Key="NoxAccentColor">#4ADE9A</Color>
+    <Color x:Key="NoxAccentForegroundColor">#07130D</Color>
+    <Color x:Key="NoxAccentSubtleColor">#17211F</Color>
+    <Color x:Key="NoxAccentMutedColor">#26453A</Color>
+    <Color x:Key="NoxWarningColor">#F5B94A</Color>
+    <Color x:Key="NoxDangerColor">#C42B1C</Color>
+    <SolidColorBrush x:Key="NoxWindowBrush" Color="#0E1116"/>
+    <SolidColorBrush x:Key="NoxSidebarBrush" Color="#12171D"/>
+    <SolidColorBrush x:Key="NoxCardBrush" Color="#151A21"/>
+    <SolidColorBrush x:Key="NoxCardHoverBrush" Color="#1A2028"/>
+    <SolidColorBrush x:Key="NoxRaisedBrush" Color="#1E2630"/>
+    <SolidColorBrush x:Key="NoxRaisedHoverBrush" Color="#252E3A"/>
+    <SolidColorBrush x:Key="NoxBorderBrush" Color="#2A323D"/>
+    <SolidColorBrush x:Key="NoxBorderStrongBrush" Color="#3A4553"/>
+    <SolidColorBrush x:Key="NoxTextBrush" Color="#E8ECF2"/>
+    <SolidColorBrush x:Key="NoxTextMutedBrush" Color="#9AA4B2"/>
+    <SolidColorBrush x:Key="NoxTextDisabledBrush" Color="#5C6673"/>
+    <SolidColorBrush x:Key="NoxAccentBrush" Color="#4ADE9A"/>
+    <SolidColorBrush x:Key="NoxAccentForegroundBrush" Color="#07130D"/>
+    <SolidColorBrush x:Key="NoxAccentSubtleBrush" Color="#17211F"/>
+    <SolidColorBrush x:Key="NoxAccentMutedBrush" Color="#26453A"/>
+    <SolidColorBrush x:Key="NoxWarningBrush" Color="#F5B94A"/>
+    <SolidColorBrush x:Key="NoxDangerBrush" Color="#C42B1C"/>
+    <SolidColorBrush x:Key="NoxSelectionBrush" Color="#4ADE9A" Opacity="0.35"/>
+    <SolidColorBrush x:Key="NoxPrimaryHoverBrush" Color="#6BE8AE"/>
+    <SolidColorBrush x:Key="NoxPrimaryPressedBrush" Color="#3BC587"/>
+
+    <FontFamily x:Key="NoxFontFamily">fonts:Inter#Inter, $Default</FontFamily>
+    <FontFamily x:Key="NoxMonoFontFamily">Menlo, Consolas, monospace</FontFamily>
+
+    <!-- Fluent theme accent, mapped to the NOX mint. -->
+    <Color x:Key="SystemAccentColor">#4ADE9A</Color>
+    <Color x:Key="SystemAccentColorDark1">#3BC587</Color>
+    <Color x:Key="SystemAccentColorDark2">#2FA772</Color>
+    <Color x:Key="SystemAccentColorDark3">#24885D</Color>
+    <Color x:Key="SystemAccentColorLight1">#6BE8AE</Color>
+    <Color x:Key="SystemAccentColorLight2">#8DEFC2</Color>
+    <Color x:Key="SystemAccentColorLight3">#B1F5D6</Color>
+    <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundChecked" Color="#07130D"/>
+    <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" Color="#07130D"/>
+    <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" Color="#07130D"/>
+    <SolidColorBrush x:Key="TextControlSelectionHighlightColor" Color="#4ADE9A" Opacity="0.35"/>
+    <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#1E2630"/>
+    <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#3A4553"/>
+    <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver" Color="#252E3A"/>
+    <SolidColorBrush x:Key="ComboBoxItemBackgroundSelected" Color="#26453A"/>
+    <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPointerOver" Color="#26453A"/>
+
+    <StreamGeometry x:Key="NoxIconLock">M7,10 H17 A3,3 0 0 1 20,13 V18 A3,3 0 0 1 17,21 H7 A3,3 0 0 1 4,18 V13 A3,3 0 0 1 7,10 Z M8,10 V7 A4,4 0 0 1 16,7 V10</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconUpload">M12,16 V4 M7,9 L12,4 L17,9 M4,16 V19 A1,1 0 0 0 5,20 H19 A1,1 0 0 0 20,19 V16</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconSearch">M4,11 A7,7 0 1 0 18,11 A7,7 0 1 0 4,11 Z M20,20 L16,16</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconChevronDown">M6,9 L12,15 L18,9</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconEdit">M12,20 H21 M16.5,3.5 A2.12,2.12 0 0 1 19.5,6.5 L7,19 L3,20 L4,16 Z</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconSignOut">M9,21 H5 A2,2 0 0 1 3,19 V5 A2,2 0 0 1 5,3 H9 M16,17 L21,12 L16,7 M21,12 H9</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconFolder">M4,20 H20 A2,2 0 0 0 22,18 V8 A2,2 0 0 0 20,6 H12.1 A2,2 0 0 1 10.41,5.1 L9.6,3.9 A2,2 0 0 0 7.93,3 H4 A2,2 0 0 0 2,5 V18 A2,2 0 0 0 4,20 Z</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconCopy">M10,8 H20 A2,2 0 0 1 22,10 V20 A2,2 0 0 1 20,22 H10 A2,2 0 0 1 8,20 V10 A2,2 0 0 1 10,8 Z M4,16 A2,2 0 0 1 2,14 V4 A2,2 0 0 1 4,2 H14 A2,2 0 0 1 16,4</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconTrash">M3,6 H21 M8,6 V4 A2,2 0 0 1 10,2 H14 A2,2 0 0 1 16,4 V6 M19,6 L18,20 A2,2 0 0 1 16,22 H8 A2,2 0 0 1 6,20 L5,6</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconInbox">M22,12 H16 L14,15 H10 L8,12 H2 M5.45,5.11 L2,12 V18 A2,2 0 0 0 4,20 H20 A2,2 0 0 0 22,18 V12 L18.55,5.11 A2,2 0 0 0 16.76,4 H7.24 A2,2 0 0 0 5.45,5.11 Z</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconUser">M19,21 V19 A4,4 0 0 0 15,15 H9 A4,4 0 0 0 5,19 V21 M8,7 A4,4 0 1 0 16,7 A4,4 0 1 0 8,7 Z</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconCheck">M5,12 L10,17 L19,7</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconFingerprint">M12,10 A2,2 0 0 0 10,12 C10,15 9.5,17 8.5,19 M14,13.12 C14,15.5 14,19 13,21 M17.29,21 C17.41,20.4 17.71,18.7 17.78,18 M2,12 A10,10 0 0 1 20,6 M2,16 H2.01 M21.8,16 C22,14 21.93,10.65 21.8,10 M5,19.5 C5.5,18 6,15 6,12 A6,6 0 0 1 6.34,10 M8.65,22 C8.86,21.34 9.1,20.68 9.29,20 M9,6.8 A6,6 0 0 1 18,12 V14</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconFile">M14,3 H7 A2,2 0 0 0 5,5 V19 A2,2 0 0 0 7,21 H17 A2,2 0 0 0 19,19 V8 Z M14,3 V8 H19</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconFileText">M14,3 H7 A2,2 0 0 0 5,5 V19 A2,2 0 0 0 7,21 H17 A2,2 0 0 0 19,19 V8 Z M14,3 V8 H19 M9,13 H15 M9,17 H13</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconFilePdf">M14,3 H7 A2,2 0 0 0 5,5 V19 A2,2 0 0 0 7,21 H17 A2,2 0 0 0 19,19 V8 Z M14,3 V8 H19 M9,18 V12 H11.5 A1.75,1.75 0 0 1 11.5,15.5 H9</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconImage">M5,3 H19 A2,2 0 0 1 21,5 V19 A2,2 0 0 1 19,21 H5 A2,2 0 0 1 3,19 V5 A2,2 0 0 1 5,3 Z M7,9 A2,2 0 1 0 11,9 A2,2 0 1 0 7,9 Z M21,15 L16,10 L5,21</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconVideo">M4,6 H14 A2,2 0 0 1 16,8 V16 A2,2 0 0 1 14,18 H4 A2,2 0 0 1 2,16 V8 A2,2 0 0 1 4,6 Z M16,10.5 L22,7 V17 L16,13.5</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconMusic">M9,18 V5 L21,3 V16 M3,18 A3,3 0 1 0 9,18 A3,3 0 1 0 3,18 Z M15,16 A3,3 0 1 0 21,16 A3,3 0 1 0 15,16 Z</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconArchive">M3,3 H21 A1,1 0 0 1 22,4 V7 A1,1 0 0 1 21,8 H3 A1,1 0 0 1 2,7 V4 A1,1 0 0 1 3,3 Z M4,8 V19 A2,2 0 0 0 6,21 H18 A2,2 0 0 0 20,19 V8 M10,12 H14</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconTable">M5,3 H19 A2,2 0 0 1 21,5 V19 A2,2 0 0 1 19,21 H5 A2,2 0 0 1 3,19 V5 A2,2 0 0 1 5,3 Z M3,9 H21 M3,15 H21 M9,9 V21</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconCode">M16,18 L22,12 L16,6 M8,6 L2,12 L8,18</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconArrowUp">M12,19 V5 M5,12 L12,5 L19,12</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconArrowDown">M12,5 V19 M5,12 L12,19 L19,12</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconShield">M20,13 C20,18 16.5,20.5 12.34,21.95 A1,1 0 0 1 11.67,21.94 C7.5,20.5 4,18 4,13 V6 A1,1 0 0 1 5,5 C7,5 9.5,3.8 11.24,2.28 A1.17,1.17 0 0 1 12.76,2.28 C14.51,3.81 17,5 19,5 A1,1 0 0 1 20,6 Z M9,12 L11,14 L15,10</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconGlobe">M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M2,12 H22 M12,2 A15.3,15.3 0 0 1 16,12 A15.3,15.3 0 0 1 12,22 A15.3,15.3 0 0 1 8,12 A15.3,15.3 0 0 1 12,2 Z</StreamGeometry>
+    <StreamGeometry x:Key="NoxIconUsers">M5.5,8 A3.5,3.5 0 1 0 12.5,8 A3.5,3.5 0 1 0 5.5,8 Z M2.5,20 A6.5,6.5 0 0 1 15.5,20 M16,4.5 A3.5,3.5 0 0 1 16,11.5 M18,14 A6,6 0 0 1 21.5,20</StreamGeometry>
+</ResourceDictionary>

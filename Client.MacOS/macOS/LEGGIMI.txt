@@ -1,0 +1,47 @@
+NOX per macOS (Apple Silicon)
+
+Prima apertura di NOX.app ricevuto come .zip (AirDrop, chiavetta, download)
+----------------------------------------------------------------------------
+L'app non e' firmata da Apple: macOS la blocca al primo avvio. Una volta sola:
+
+1. Estrai lo zip e sposta NOX.app in Applicazioni.
+2. Apri il Terminale e incolla:
+
+     chmod +x /Applications/NOX.app/Contents/MacOS/NOX
+     xattr -dr com.apple.quarantine /Applications/NOX.app
+     codesign --force --deep --sign - /Applications/NOX.app
+
+3. Apri NOX normalmente.
+
+Compilare direttamente sul Mac (serve .NET 10 SDK)
+--------------------------------------------------
+Dalla cartella del repository:
+
+     bash Zkt/Client.MacOS/macOS/build-on-mac.sh
+
+Crea publish/NOX-macOS-arm64/NOX.app, gia' firmata per l'uso locale.
+
+Installazione da Terminale (senza i comandi qui sopra)
+------------------------------------------------------
+install-nox.sh scarica NOX con curl (che non applica la quarantena di macOS),
+controlla lo SHA-256, mette NOX.app in /Applications e la apre:
+
+     curl -fsSL https://github.com/gabrielechi/Nox/releases/latest/download/install-nox.sh | bash
+
+Disinstallazione (le impostazioni in ~/Library/Application Support/NOX restano):
+
+     curl -fsSL https://github.com/gabrielechi/Nox/releases/latest/download/install-nox.sh | bash -s -- --uninstall
+
+Pubblicare una nuova versione per Mac
+-------------------------------------
+1. Alza <Version> in Client.MacOS.csproj ed esegui build-on-mac.sh: crea
+   NOX-macOS-arm64.zip e NOX-macOS-arm64.zip.sha256.
+2. Nella release di github.com/gabrielechi/Nox (la stessa del setup Windows)
+   allega, con questi nomi esatti:
+     NOX-macOS-arm64.zip          (app)
+     NOX-macOS-arm64.zip.sha256   (per l'installazione da Terminale)
+     install-nox.sh               (questo script)
+   NOX su Mac propone l'aggiornamento solo se la release contiene sia lo zip
+   sia install-nox.sh; una release con il solo .exe non viene proposta al Mac.
+Lo zip di publish-from-windows.ps1 ha il numero di versione nel nome: rinominalo
+in NOX-macOS-arm64.zip e crea il .sha256 (shasum -a 256 NOX-macOS-arm64.zip).

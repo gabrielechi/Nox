@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <data name="NoAccount" xml:space="preserve"><value>Non ho un account</value></data>
+  <data name="AlreadyHaveAccount" xml:space="preserve"><value>Ho già un account</value></data>
+  <data name="Registration" xml:space="preserve"><value>Registrazione</value></data>
+  <data name="LoginError" xml:space="preserve"><value>Errore di login</value></data>
+  <data name="PasswordStrength" xml:space="preserve"><value>Robustezza stimata</value></data>
+  <data name="StrengthEmpty" xml:space="preserve"><value>Robustezza: —</value></data>
+  <data name="StrengthCalculating" xml:space="preserve"><value>Valutazione in corso...</value></data>
+  <data name="StrengthWeak" xml:space="preserve"><value>Debole</value></data>
+  <data name="StrengthFair" xml:space="preserve"><value>Discreta</value></data>
+  <data name="StrengthGood" xml:space="preserve"><value>Buona</value></data>
+  <data name="StrengthStrong" xml:space="preserve"><value>Forte</value></data>
+  <data name="StrengthResult" xml:space="preserve"><value>Robustezza: {0}</value></data>
+  <data name="StrengthUnavailable" xml:space="preserve"><value>Robustezza non disponibile</value></data>
+  <data name="PasswordStrengthExplanation" xml:space="preserve"><value>Stima locale, non una misura esatta dell'entropia né una garanzia di sicurezza. Non sostituisce i requisiti della password.</value></data>
+  <data name="Server" xml:space="preserve"><value>Server</value></data>
+  <data name="Protocol" xml:space="preserve"><value>Protocollo</value></data>
+  <data name="ChangeServer" xml:space="preserve"><value>Cambia server</value></data>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms</value></resheader>
+  <data name="SelectARecipient" xml:space="preserve"><value>Selezionare un destinatario</value></data>
+  <data name="DragFilesHereOrClickTo" xml:space="preserve"><value>Trascina i file qui o fai clic per selezionarli</value></data>
+  <data name="SelectedFiles" xml:space="preserve"><value>File selezionati</value></data>
+  <data name="SearchForAUser" xml:space="preserve"><value>Cerca un utente</value></data>
+  <data name="Me" xml:space="preserve"><value>me</value></data>
+  <data name="DefaultFolder" xml:space="preserve"><value>Cartella predefinita</value></data>
+  <data name="EnterAValidServerAddressFor" xml:space="preserve"><value>Inserisci un indirizzo server valido, ad esempio localhost:7003.</value></data>
+  <data name="UsernameIsRequired" xml:space="preserve"><value>Username mancante.</value></data>
+  <data name="Checking" xml:space="preserve"><value>Verifico..</value></data>
+  <data name="Continue" xml:space="preserve"><value>Prosegui →</value></data>
+  <data name="PasswordIsRequired" xml:space="preserve"><value>Password mancante.</value></data>
+  <data name="SigningIn" xml:space="preserve"><value>Accedo...</value></data>
+  <data name="SignedInButTheVaultCould" xml:space="preserve"><value>Accesso riuscito, ma non è stato possibile decifrare il vault: {0}</value></data>
+  <data name="CouldNotLoadTheCryptographicVault" xml:space="preserve"><value>Non è stato possibile caricare il vault crittografico.</value></data>
+  <data name="SignInCancelledCryptographicIdentityNot" xml:space="preserve"><value>Accesso annullato: identità crittografica non verificata.</value></data>
+  <data name="Hello" xml:space="preserve"><value>Ciao, {0}</value></data>
+  <data name="SignIn" xml:space="preserve"><value>Accedi</value></data>
+  <data name="Connect" xml:space="preserve"><value>Connetti</value></data>
+  <data name="PasswordMeetsTheRequirements" xml:space="preserve"><value>Password valida.</value></data>
+  <data name="StillNeeded" xml:space="preserve"><value>Mancano: {0}.</value></data>
+  <data name="1MoreCharacterToReach12" xml:space="preserve"><value>1 carattere per arrivare a 12</value></data>
+  <data name="MoreCharactersToReach12" xml:space="preserve"><value>{0} caratteri per arrivare a 12</value></data>
+  <data name="AnUppercaseLetterAZ" xml:space="preserve"><value>una maiuscola (A-Z)</value></data>
+  <data name="ALowercaseLetterAZ" xml:space="preserve"><value>una minuscola (a-z)</value></data>
+  <data name="ADigit09" xml:space="preserve"><value>un numero (0-9)</value></data>
+  <data name="ASpecialCharacter" xml:space="preserve"><value>un carattere speciale</value></data>
+  <data name="Connecting" xml:space="preserve"><value>Connessione...</value></data>
+  <data name="Connected" xml:space="preserve"><value>Connesso</value></data>
+  <data name="HTTPDoesNotEncryptCredentialsIn" xml:space="preserve"><value>HTTP non cifra le credenziali in transito. Usalo solo per prove locali.</value></data>
+  <data name="ChooseTheDefaultFolder" xml:space="preserve"><value>Scegli la cartella predefinita</value></data>
+  <data name="NotConnected" xml:space="preserve"><value>Non connesso</value></data>
+  <data name="CheckTheServerConnectionFirst" xml:space="preserve"><value>Verifica prima la connessione al server.</value></data>
+  <data name="ServerAddressIsRequired" xml:space="preserve"><value>Server URL mancante</value></data>
+  <data name="EnterAUsername" xml:space="preserve"><value>Inserire Username</value></data>
+  <data name="Registering" xml:space="preserve"><value>Registro..</value></data>
+  <data name="AccountCreatedSelectContinueToSign" xml:space="preserve"><value>Account creato. Premi Prosegui per accedere.</value></data>
+  <data name="Register" xml:space="preserve"><value>Registrati</value></data>
+  <data name="SignInBeforeContactingARecipient" xml:space="preserve"><value>Devi effettuare il login prima di contattare un destinatario.</value></data>
+  <data name="EnterTheRecipientSUsername" xml:space="preserve"><value>L'username del destinatario è necessario.</value></data>
+  <data name="CheckingAlt" xml:space="preserve"><value>Checking...</value></data>
+  <data name="RecipientNotTrustedTransferBlocked" xml:space="preserve"><value>Rifiuto del destinatario, trasferimento bloccato.</value></data>
+  <data name="YourAccountIsReadyToReceive" xml:space="preserve"><value>Il tuo account è pronto a ricevere file.</value></data>
+  <data name="UserIsAvailable" xml:space="preserve"><value>Utente '{0}' disponibile</value></data>
+  <data name="UserIsReadyButNoOne" xml:space="preserve"><value>Utente '{0}' pronto, ma non ci sono OPKs disponibili | X3DH fallback attivato</value></data>
+  <data name="UserVerifiedAndAddedToYour" xml:space="preserve"><value>Utente '{0}' verificato e aggiunto ai contatti</value></data>
+  <data name="UserVerifiedButNoOneTime" xml:space="preserve"><value>Utente '{0}' verificato, ma non ci sono OPKs disponibili | X3DH fallback attivato</value></data>
+  <data name="TheSessionPasswordIsUnavailable" xml:space="preserve"><value>La password della sessione non è disponibile.</value></data>
+  <data name="Check" xml:space="preserve"><value>Check</value></data>
+  <data name="TheCryptographicVaultHasNotBeen" xml:space="preserve"><value>Il vault crittografico non è stato caricato.</value></data>
+  <data name="TrustOnFirstUse" xml:space="preserve"><value>Verifica Trust On First Use</value></data>
+  <data name="VerifyRecipient" xml:space="preserve"><value>Prima verifica del destinatario</value></data>
+  <data name="ThisIsTheFirstTimeYou" xml:space="preserve"><value>È la prima volta che contatti '{0}'.</value></data>
+  <data name="RecipientFingerprint" xml:space="preserve"><value>Fingerprint del destinatario</value></data>
+  <data name="CompareTheFingerprintWithTheRecipient" xml:space="preserve"><value>Confronta la fingerprint con il destinatario su un canale separato.</value></data>
+  <data name="TransferBlocked" xml:space="preserve"><value>Trasferimento bloccato</value></data>
+  <data name="TheTransferHasBeenBlocked" xml:space="preserve"><value>Il trasferimento è stato bloccato</value></data>
+  <data name="NewFingerprintDetected" xml:space="preserve"><value>Nuova fingerprint rilevata</value></data>
+  <data name="VerifyTheNewFingerprintWithThe" xml:space="preserve"><value>Verifica la nuova fingerprint con il destinatario su un canale separato.</value></data>
+  <data name="EnterTheLast4CharactersProvided" xml:space="preserve"><value>Inserisci gli ultimi 4 caratteri comunicati dal destinatario:</value></data>
+  <data name="TheCharactersDoNotMatchCheck" xml:space="preserve"><value>I caratteri inseriti non corrispondono. Verifica di nuovo con il destinatario.</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Annulla</value></data>
+  <data name="PossibleMITMAttack" xml:space="preserve"><value>Possibile attacco MITM</value></data>
+  <data name="YourPublicKeysHaveChanged" xml:space="preserve"><value>Le tue chiavi pubbliche sono cambiate</value></data>
+  <data name="CancelSignIn" xml:space="preserve"><value>Annulla accesso</value></data>
+  <data name="NewIdentity" xml:space="preserve"><value>Nuova identità</value></data>
+  <data name="RestoreFromVault" xml:space="preserve"><value>Ripristina dal vault</value></data>
+  <data name="CreateANewCryptographicIdentity" xml:space="preserve"><value>Crea nuova identità crittografica</value></data>
+  <data name="TheSessionOrVaultIsUnavailable" xml:space="preserve"><value>La sessione o il vault non sono disponibili per il ripristino dell'identità.</value></data>
+  <data name="CouldNotGenerateASignedPre" xml:space="preserve"><value>Non è stato possibile generare una signed pre-key.</value></data>
+  <data name="ANewCryptographicIdentityHasBeen" xml:space="preserve"><value>È stata creata e pubblicata una nuova identità crittografica.</value></data>
+  <data name="TheVaultIdentityHasBeenRepublished" xml:space="preserve"><value>L’identità del vault è stata ripubblicata sul server.</value></data>
+  <data name="TheServerNowHasANew" xml:space="preserve"><value> Il server contiene ora una nuova SPK e 25 OPK non utilizzate.</value></data>
+  <data name="IdentityRestored" xml:space="preserve"><value>Identità ripristinata</value></data>
+  <data name="FileIntegrityCompromised" xml:space="preserve"><value>Integrità del file compromessa</value></data>
+  <data name="PossibleTamperingDetected" xml:space="preserve"><value>Possibile manomissione rilevata</value></data>
+  <data name="Close" xml:space="preserve"><value>Chiudi</value></data>
+  <data name="SelectFilesToSendUpTo" xml:space="preserve"><value>Seleziona i file da inviare (massimo {0})</value></data>
+  <data name="YouSelectedFilesTheLimitIs" xml:space="preserve"><value>Hai selezionato {0} file. Massimo {1} per invio: seleziona meno file.</value></data>
+  <data name="FilesSelected" xml:space="preserve"><value>{0}/{1} file selezionati.</value></data>
+  <data name="RecipientChangedCheckTheRecipientAgain" xml:space="preserve"><value>Destinatario cambiato, ricontrollare</value></data>
+  <data name="SignInBeforeSendingFilesTo" xml:space="preserve"><value>Devi effettuare il login prima di inviare file a te stesso.</value></data>
+  <data name="ThePublicKeysForYourAccountAlt" xml:space="preserve"><value>Le chiavi pubbliche associate al tuo account sono cambiate. Trasferimento bloccato.</value></data>
+  <data name="TheRecipientSNewIdentityHas" xml:space="preserve"><value>La nuova identità del destinatario non è stata verificata. Trasferimento bloccato.</value></data>
+  <data name="SignInFirst" xml:space="preserve"><value>Devi prima effettuare l'accesso.</value></data>
+  <data name="CheckAndVerifyTheRecipientFirst" xml:space="preserve"><value>Controlla e verifica prima il destinatario.</value></data>
+  <data name="SelectAtLeastOneFile" xml:space="preserve"><value>Seleziona almeno un file.</value></data>
+  <data name="YouCanSendUpToFiles" xml:space="preserve"><value>Puoi inviare al massimo {0} file per trasferimento. Seleziona meno file.</value></data>
+  <data name="Encrypting" xml:space="preserve"><value>Cifro..</value></data>
+  <data name="UpdatingTheRecipientSKeys" xml:space="preserve"><value>Aggiorno le chiavi del destinatario...</value></data>
+  <data name="DerivingTheX3DHSecret" xml:space="preserve"><value>Creo il secret X3DH..</value></data>
+  <data name="EncryptingAlt" xml:space="preserve"><value>Cifratura di {0}...</value></data>
+  <data name="StartingTransfer" xml:space="preserve"><value>Avvio trasferimento...</value></data>
+  <data name="UploadingFile" xml:space="preserve"><value>Caricamento file {0}/{1}...</value></data>
+  <data name="SentExpires" xml:space="preserve"><value>Inviato | Scadenza: {0}.</value></data>
+  <data name="Send" xml:space="preserve"><value>Invia</value></data>
+  <data name="TheCryptographicSessionOrVaultIs" xml:space="preserve"><value>La sessione o il vault crittografico non sono disponibili.</value></data>
+  <data name="SelectATransferFirst" xml:space="preserve"><value>Seleziona prima un trasferimento.</value></data>
+  <data name="InvalidDefaultFolderChooseAValid" xml:space="preserve"><value>Default directory non valida. Scegli una directory valida o disattiva l'opzione.</value></data>
+  <data name="ChooseWhereToSaveTheDecrypted" xml:space="preserve"><value>Scegli dove salvare i file decifrati</value></data>
+  <data name="Decrypting" xml:space="preserve"><value>Decifro..</value></data>
+  <data name="LoadingTransferDetails" xml:space="preserve"><value>Carico dettagli di trasferimento...</value></data>
+  <data name="TheSignedPreKeyUsedFor" xml:space="preserve"><value>Il trasferimento usa una signed pre-key che non è più disponibile nel vault locale.</value></data>
+  <data name="TheOneTimePreKeyUsed" xml:space="preserve"><value>Il trasferimento usa una one-time pre-key che non è più disponibile nel vault locale.</value></data>
+  <data name="DownloadingFile" xml:space="preserve"><value>Scarico {0}/{1}...</value></data>
+  <data name="FileDownloadedDecryptedAndRemovedFrom" xml:space="preserve"><value>File scaricato, decifrato e rimosso dal server.</value></data>
+  <data name="TamperedFileDiscardedLocallyAndDeleted" xml:space="preserve"><value>File manomesso: scartato localmente ed eliminato dal server.</value></data>
+  <data name="TamperedFileDiscardedLocallyServerDeletion" xml:space="preserve"><value>File manomesso: scartato localmente; eliminazione server non confermata.</value></data>
+  <data name="Download" xml:space="preserve"><value>Download</value></data>
+  <data name="SignInFirstAlt" xml:space="preserve"><value>Devi fare login</value></data>
+  <data name="1PendingTransfer" xml:space="preserve"><value>1 trasferimento in attesa</value></data>
+  <data name="PendingTransfers" xml:space="preserve"><value>{0} trasferimenti in attesa</value></data>
+  <data name="Refreshing" xml:space="preserve"><value>Aggiornamento..</value></data>
+  <data name="MeAlt" xml:space="preserve"><value>Me</value></data>
+  <data name="FileSExpires" xml:space="preserve"><value>{0} - {1} file - Scadenza: {2}</value></data>
+  <data name="Bytes" xml:space="preserve"><value>bytes</value></data>
+  <data name="RefreshingAlt" xml:space="preserve"><value>Aggiornamento...</value></data>
+  <data name="Refresh" xml:space="preserve"><value>Aggiorna</value></data>
+  <data name="LogOutOfThisSession" xml:space="preserve"><value>Vuoi effettuare il logout?</value></data>
+  <data name="Logout" xml:space="preserve"><value>Logout</value></data>
+  <data name="UsernameNFullFingerprint" xml:space="preserve"><value>Username: {0}
+Fingerprint completa: {1}</value></data>
+  <data name="NoTrustedContacts" xml:space="preserve"><value>Nessun contatto verificato</value></data>
+  <data name="1TrustedContact" xml:space="preserve"><value>1 contatto fidato</value></data>
+  <data name="TrustedContacts" xml:space="preserve"><value>{0} contatti fidati</value></data>
+  <data name="RemoveTrustedContact" xml:space="preserve"><value>Rimuovi contatto verificato '{0}'?</value></data>
+  <data name="RemoveTrustedContactAlt" xml:space="preserve"><value>Rimuovi contatto verificato</value></data>
+  <data name="CannotReachTheServerCheckYour" xml:space="preserve"><value>Impossibile comunicare con il server. Controlla la connessione e l'indirizzo configurato.</value></data>
+  <data name="TheRequestTimedOutTryAgain" xml:space="preserve"><value>La richiesta ha impiegato troppo tempo ed è stata annullata. Riprova.</value></data>
+  <data name="InvalidServerAddress" xml:space="preserve"><value>L'indirizzo del server non è valido.</value></data>
+  <data name="TheServerReturnedInvalidData" xml:space="preserve"><value>Il server ha restituito dati in un formato non valido.</value></data>
+  <data name="CouldNotReadOrWriteThe" xml:space="preserve"><value>Non è stato possibile leggere o scrivere il file.</value></data>
+  <data name="CryptographicVerificationFailed" xml:space="preserve"><value>La verifica crittografica dei dati non è riuscita.</value></data>
+  <data name="AnUnexpectedErrorOccurredTryAgain" xml:space="preserve"><value>Si è verificato un errore imprevisto. Riprova.</value></data>
+  <data name="InvalidOutputFolder" xml:space="preserve"><value>Directory di output non valida.</value></data>
+  <data name="TheServerAddressIsRequired" xml:space="preserve"><value>L'indirizzo del server è obbligatorio.</value></data>
+  <data name="TheServerReturnedAnInvalidSign" xml:space="preserve"><value>La risposta di accesso ricevuta dal server non è valida.</value></data>
+  <data name="ThisServerDoesNotSupportUsername" xml:space="preserve"><value>Questa versione del server non supporta la verifica dello username. Aggiorna il server Nox.</value></data>
+  <data name="TheServerReturnedAnInvalidUser" xml:space="preserve"><value>La risposta relativa all'utente non è valida.</value></data>
+  <data name="TheServerReturnedInvalidPreKey" xml:space="preserve"><value>La risposta sullo stato delle pre-key non è valida.</value></data>
+  <data name="EnterTheRecipientSUsernameAlt" xml:space="preserve"><value>Inserire il nome utente del destinatario.</value></data>
+  <data name="TheServerReturnedAnInvalidPre" xml:space="preserve"><value>Il bundle di pre-key ricevuto non è valido.</value></data>
+  <data name="TheServerReturnedAnInvalidTransfer" xml:space="preserve"><value>La risposta di creazione del trasferimento non è valida.</value></data>
+  <data name="TheTransferDetailsAreInvalid" xml:space="preserve"><value>I dettagli del trasferimento ricevuti non sono validi.</value></data>
+  <data name="YouAreNotSignedInSign" xml:space="preserve"><value>Il client non è autenticato. Eseguire nuovamente l'accesso.</value></data>
+  <data name="IncorrectUsernameOrPasswordAfterFive" xml:space="preserve"><value>Username o password non corretti. Dopo cinque tentativi errati l'account viene bloccato per 10 minuti.</value></data>
+  <data name="YourSessionHasExpiredOrIs" xml:space="preserve"><value>Sessione scaduta o non valida. Eseguire nuovamente l'accesso.</value></data>
+  <data name="YouDoNotHavePermissionTo" xml:space="preserve"><value>Non disponi dei permessi necessari per eseguire questa operazione.</value></data>
+  <data name="RecipientNotFoundOrMissingThe" xml:space="preserve"><value>Destinatario non trovato oppure privo delle chiavi necessarie.</value></data>
+  <data name="TheRequestedResourceWasNotFound" xml:space="preserve"><value>La risorsa richiesta non è stata trovata.</value></data>
+  <data name="ThatUsernameIsAlreadyTaken" xml:space="preserve"><value>Questo nome utente è già utilizzato.</value></data>
+  <data name="ThisOperationCannotBeCompletedIn" xml:space="preserve"><value>L'operazione non può essere completata nello stato attuale.</value></data>
+  <data name="TheFileOrRequestExceedsThe" xml:space="preserve"><value>Il file o la richiesta supera la dimensione consentita dal server.</value></data>
+  <data name="TooManyUsernameChecksTryAgain" xml:space="preserve"><value>Troppe verifiche dello username. Riprova tra un minuto.</value></data>
+  <data name="TooManyRequestsTryAgainIn" xml:space="preserve"><value>Troppe richieste. Riprova tra 10 minuti.</value></data>
+  <data name="TheServerEncounteredAnErrorTry" xml:space="preserve"><value>Il server ha riscontrato un errore. Riprova più tardi.</value></data>
+  <data name="OperationFailedHTTPStatus" xml:space="preserve"><value>Operazione non riuscita. Codice HTTP {0}.</value></data>
+  <data name="UsernameIsRequiredAlt" xml:space="preserve"><value>Il nome utente è obbligatorio.</value></data>
+  <data name="PasswordIsRequiredAlt" xml:space="preserve"><value>La password è obbligatoria.</value></data>
+  <data name="ThePasswordMustContainAtLeast" xml:space="preserve"><value>La password deve contenere almeno 12 caratteri.</value></data>
+  <data name="ThePasswordMustIncludeAnUppercase" xml:space="preserve"><value>La password deve contenere almeno una lettera maiuscola.</value></data>
+  <data name="ThePasswordMustIncludeALowercase" xml:space="preserve"><value>La password deve contenere almeno una lettera minuscola.</value></data>
+  <data name="ThePasswordMustIncludeADigit" xml:space="preserve"><value>La password deve contenere almeno un numero.</value></data>
+  <data name="ThePasswordMustIncludeASpecial" xml:space="preserve"><value>La password deve contenere almeno un carattere speciale.</value></data>
+  <data name="InvalidRequest" xml:space="preserve"><value>La richiesta inviata al server non è valida.</value></data>
+  <data name="TheEncryptedVaultContentIsInvalid" xml:space="preserve"><value>Il contenuto del vault cifrato non è valido.</value></data>
+  <data name="TheFileLengthDoesNotMatch" xml:space="preserve"><value>La lunghezza del file non corrisponde ai metadati autenticati.</value></data>
+  <data name="TheServerSOneTimePre" xml:space="preserve"><value>Il pool di one-time pre-key sul server non corrisponde al vault locale.</value></data>
+  <data name="EndToEndEncryptedFileTransfer" xml:space="preserve"><value>End-to-End Encrypted File Transfer</value></data>
+  <data name="Minimize" xml:space="preserve"><value>Riduci a icona</value></data>
+  <data name="SignInAlt" xml:space="preserve"><value>Accesso</value></data>
+  <data name="ServerURL" xml:space="preserve"><value>Server URL</value></data>
+  <data name="ServerProtocol" xml:space="preserve"><value>Protocollo del server</value></data>
+  <data name="UnencryptedConnectionUseHTTPOnlyFor" xml:space="preserve"><value>Connessione non cifrata: usa HTTP solo per prove locali.</value></data>
+  <data name="ServerAddress" xml:space="preserve"><value>Indirizzo del server</value></data>
+  <data name="RememberServer" xml:space="preserve"><value>Ricorda server</value></data>
+  <data name="Username" xml:space="preserve"><value>Username</value></data>
+  <data name="Password" xml:space="preserve"><value>Password</value></data>
+  <data name="Language" xml:space="preserve"><value>Lingua</value></data>
+  <data name="SendFiles" xml:space="preserve"><value>Trasferimento file</value></data>
+  <data name="Recipient" xml:space="preserve"><value>Destinatario</value></data>
+  <data name="OpenTrustedContacts" xml:space="preserve"><value>Apri i contatti fidati</value></data>
+  <data name="TrustedContactsAlt" xml:space="preserve"><value>Contatti fidati</value></data>
+  <data name="SendToMyAccount" xml:space="preserve"><value>Invia al mio account</value></data>
+  <data name="FilesToSend" xml:space="preserve"><value>File da inviare</value></data>
+  <data name="Maximum20Files" xml:space="preserve"><value>Massimo 20 file</value></data>
+  <data name="SelectFilesUpTo20" xml:space="preserve"><value>Seleziona file (massimo 20)</value></data>
+  <data name="SelectFiles" xml:space="preserve"><value>Seleziona file</value></data>
+  <data name="IncomingFiles" xml:space="preserve"><value>File in entrata</value></data>
+  <data name="SaveToTheDefaultFolder" xml:space="preserve"><value>Salva nella cartella predefinita</value></data>
+  <data name="ChooseDefaultFolder" xml:space="preserve"><value>Scegli cartella predefinita</value></data>
+  <data name="Identity" xml:space="preserve"><value>Identità</value></data>
+  <data name="FullFingerprint" xml:space="preserve"><value>Fingerprint completa</value></data>
+  <data name="Copy" xml:space="preserve"><value>Copia</value></data>
+  <data name="RemoveContact" xml:space="preserve"><value>Rimuovi contatto</value></data>
+  <data name="CannotSaveLanguage"><value>Non è stato possibile salvare la preferenza della lingua.</value></data>
+  <data name="RecipientKeysChanged" xml:space="preserve"><value>Le chiavi di identità di '{0}' sono cambiate. Questo potrebbe indicare il ripristino di un dispositivo o un attacco man-in-the-middle.</value></data>
+  <data name="OwnIdentityMismatch" xml:space="preserve"><value>Le chiavi pubbliche associate al tuo account sul server non corrispondono alle chiavi contenute nel vault cifrato locale. Potrebbe trattarsi di un attacco man-in-the-middle.</value></data>
+  <data name="RecoveryExplanation" xml:space="preserve"><value>Puoi ripristinare sul server le chiavi originali conservate nel vault oppure eliminare la vecchia identità e crearne una nuova. Se scegli una nuova identità, i tuoi contatti dovranno verificarne nuovamente la fingerprint.</value></data>
+  <data name="RecoveryFingerprints" xml:space="preserve"><value>Fingerprint nel vault:
+{0}
+
+Fingerprint pubblicata dal server:
+{1}</value></data>
+  <data name="ConfirmIdentityReplacement" xml:space="preserve"><value>La precedente identità privata verrà eliminata dal vault. I trasferimenti destinati alle vecchie chiavi potrebbero non essere più decifrabili e i contatti dovranno verificare la nuova fingerprint. Continuare?</value></data>
+  <data name="AuthenticationFailed" xml:space="preserve"><value>La verifica di autenticità AES-GCM non è riuscita. Il contenuto cifrato potrebbe essere stato modificato durante la permanenza sul server o durante il trasferimento.</value></data>
+  <data name="TamperedRemoved" xml:space="preserve"><value>Per la tua sicurezza il file è stato scartato dal dispositivo. Il server è stato avvisato e ha eliminato definitivamente il trasferimento cifrato.</value></data>
+  <data name="TamperedNotConfirmed" xml:space="preserve"><value>Per la tua sicurezza il file è stato scartato dal dispositivo. Non è stato possibile confermare l’eliminazione dal server: riprova quando la connessione è disponibile.</value></data>
+  <data name="OperationUnavailable"><value>Non è possibile completare l'operazione nello stato attuale.</value></data>
+  <data name="InvalidOperationData"><value>I dati ricevuti non sono validi per questa operazione.</value></data>
+  <data name="UpdateAvailableTitle" xml:space="preserve"><value>Nuova versione disponibile</value></data>
+  <data name="UpdateAvailableMessage" xml:space="preserve"><value>È disponibile NOX {0} (installata: {1}). Aggiornare?</value></data>
+  <data name="UpdateDontShowAgain" xml:space="preserve"><value>Non mostrare più per questa versione</value></data>
+  <data name="UpdateLater" xml:space="preserve"><value>Più tardi</value></data>
+  <data name="UpdateNow" xml:space="preserve"><value>Aggiorna</value></data>
+  <data name="UpdateDownloading" xml:space="preserve"><value>Download dell'aggiornamento... {0}%</value></data>
+  <data name="UpdateStartingInstaller" xml:space="preserve"><value>Download completato e verificato. Avvio dell'installazione...</value></data>
+  <data name="UpdateDownloadFailed" xml:space="preserve"><value>Download non riuscito. Controlla la connessione e riprova.</value></data>
+  <data name="UpdateIntegrityFailed" xml:space="preserve"><value>Il file scaricato non corrisponde a quello pubblicato ed è stato eliminato. Aggiornamento annullato.</value></data>
+  <data name="UpdateInstallerStartFailed" xml:space="preserve"><value>Non è stato possibile avviare l'installazione.</value></data>
+  <data name="UpdateVersionTooltip" xml:space="preserve"><value>Nuova versione disponibile: {0}. Clicca per aggiornare.</value></data>
+</root>

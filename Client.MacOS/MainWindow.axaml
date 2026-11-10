@@ -1,0 +1,475 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Client.MacOS.MainWindow"
+        Title="NOX"
+        Icon="avares://NOX/Assets/NoxAppIcon.png"
+        Width="432" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="PreferSystemChrome"
+        ExtendClientAreaTitleBarHeightHint="34">
+
+    <Window.Styles>
+        <!-- Drop area states: hover, drag-over (class "dragover"), keyboard focus, enabled. -->
+        <Style Selector="Border#DropZoneSurface">
+            <Setter Property="Background" Value="{StaticResource NoxSidebarBrush}"/>
+        </Style>
+        <Style Selector="Border#DropZoneBorder:pointerover:not(:disabled) Border#DropZoneSurface">
+            <Setter Property="Background" Value="{StaticResource NoxCardHoverBrush}"/>
+        </Style>
+        <Style Selector="Border#DropZoneBorder.dragover Border#DropZoneSurface">
+            <Setter Property="Background" Value="{StaticResource NoxAccentSubtleBrush}"/>
+        </Style>
+        <Style Selector="Rectangle#DropZoneDash">
+            <Setter Property="Stroke" Value="{StaticResource NoxBorderStrongBrush}"/>
+        </Style>
+        <Style Selector="Border#DropZoneBorder:pointerover:not(:disabled) Rectangle#DropZoneDash">
+            <Setter Property="Stroke" Value="{StaticResource NoxTextDisabledBrush}"/>
+        </Style>
+        <Style Selector="Border#DropZoneBorder:focus-visible Rectangle#DropZoneDash, Border#DropZoneBorder.dragover Rectangle#DropZoneDash">
+            <Setter Property="Stroke" Value="{StaticResource NoxAccentBrush}"/>
+        </Style>
+        <Style Selector="Border#DropZoneBorder:not(:disabled)">
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Path#DropZoneIcon">
+            <Setter Property="Stroke" Value="{StaticResource NoxTextDisabledBrush}"/>
+        </Style>
+        <Style Selector="Border#DropZoneBorder:not(:disabled) Path#DropZoneIcon">
+            <Setter Property="Stroke" Value="{StaticResource NoxAccentBrush}"/>
+        </Style>
+        <Style Selector="TextBlock#DropZonePromptTextBlock">
+            <Setter Property="Foreground" Value="{StaticResource NoxTextMutedBrush}"/>
+        </Style>
+        <Style Selector="Border#DropZoneBorder:not(:disabled) TextBlock#DropZonePromptTextBlock">
+            <Setter Property="Foreground" Value="{StaticResource NoxTextBrush}"/>
+        </Style>
+        <!-- Account card border follows hover / keyboard focus -->
+        <Style Selector="Border#AccountCard">
+            <Setter Property="BorderBrush" Value="{StaticResource NoxBorderBrush}"/>
+        </Style>
+        <Style Selector="Border#AccountCard:pointerover, Border#AccountCard:focus-within">
+            <Setter Property="BorderBrush" Value="{StaticResource NoxBorderStrongBrush}"/>
+        </Style>
+        <Style Selector="Border#AccountMenu">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.15"/>
+                </Transitions>
+            </Setter>
+        </Style>
+    </Window.Styles>
+
+    <Grid x:Name="AppRoot" RowDefinitions="34,*">
+
+        <!-- ================= AUTH SCREEN ================= -->
+        <Grid x:Name="AuthScreen" Grid.Row="1" RowDefinitions="*,38">
+            <StackPanel x:Name="AuthSurface" Width="416" HorizontalAlignment="Center" VerticalAlignment="Top">
+                <StackPanel x:Name="AuthBrand" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,4,0,24">
+                    <Image Source="avares://NOX/Assets/NoxLogo.png" Width="72" Height="72"/>
+                    <TextBlock Text="NOX" VerticalAlignment="Center" FontSize="36" FontWeight="Bold" Margin="12,0,0,0"/>
+                </StackPanel>
+                <Border x:Name="AuthCard" Classes="card" Margin="20,0,20,24" Padding="24" CornerRadius="16">
+                    <StackPanel x:Name="AuthCardContent">
+                        <TextBlock x:Name="AuthHeading" Classes="title" Text="{DynamicResource NoxText.Server}" Margin="0,0,0,16"/>
+
+                        <Grid x:Name="ConnectedServerSummary" IsVisible="False" Height="44" Margin="0,0,0,8" ColumnDefinitions="Auto,*,Auto">
+                            <Ellipse Width="8" Height="8" Fill="{StaticResource NoxAccentBrush}" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="ConnectedServerUrl" Grid.Column="1" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" Classes="muted"/>
+                            <Button x:Name="ChangeServerButton" Grid.Column="2" Classes="iconButton" Width="40" Height="40" Margin="8,0,0,0"
+                                    ToolTip.Tip="{DynamicResource NoxText.ChangeServer}" Click="ChangeServer_Click">
+                                <Viewbox Width="18" Height="18"><Path Classes="icon" Data="{StaticResource NoxIconEdit}"/></Viewbox>
+                            </Button>
+                        </Grid>
+
+                        <StackPanel x:Name="ServerConnectionFields">
+                            <Grid Margin="0,0,0,12" ColumnDefinitions="91,*" RowDefinitions="Auto,Auto">
+                                <TextBlock Classes="label" Text="{DynamicResource NoxText.Protocol}" Margin="0,0,8,6"/>
+                                <TextBlock Grid.Column="1" Classes="label" Text="{DynamicResource NoxText.ServerURL}" Margin="0,0,0,6"/>
+                                <ComboBox x:Name="ServerSchemeBox" Grid.Row="1" SelectedIndex="0" Margin="0,0,8,0" Height="46" Padding="8,0,0,0"
+                                          HorizontalAlignment="Stretch" SelectionChanged="ServerScheme_Changed">
+                                    <ComboBoxItem Content="HTTPS"/>
+                                    <ComboBoxItem Content="HTTP"/>
+                                </ComboBox>
+                                <TextBox x:Name="ServerUrlTextBox" Grid.Row="1" Grid.Column="1" Text="localhost:7003"
+                                         TextChanged="ServerUrlTextBox_TextChanged"/>
+                            </Grid>
+                            <CheckBox x:Name="RememberServerCheckBox" Content="{DynamicResource NoxText.RememberServer}" Margin="0,0,0,16"
+                                      IsCheckedChanged="RememberServerCheckBox_Changed"/>
+                        </StackPanel>
+
+                        <TextBlock x:Name="UsernameLabelTextBlock" Classes="label" Text="{DynamicResource NoxText.Username}" IsVisible="False"/>
+                        <TextBox x:Name="UsernameTextBox" Margin="0,6,0,12" Height="46" IsVisible="False" IsEnabled="False"
+                                 TextChanged="UsernameTextBox_Changed"/>
+
+                        <TextBlock x:Name="PasswordLabelTextBlock" Classes="label" Text="{DynamicResource NoxText.Password}" IsVisible="False"/>
+                        <TextBox x:Name="PasswordBox" PasswordChar="•" Margin="0,6,0,12" Height="46" IsVisible="False" IsEnabled="False"
+                                 TextChanged="RegistrationPassword_Changed"/>
+                        <TextBlock x:Name="RegistrationPasswordHint" IsVisible="False" MinHeight="40" TextWrapping="Wrap"
+                                   FontSize="12" LineHeight="18" Margin="0,0,0,8"/>
+
+                        <StackPanel x:Name="PasswordStrengthPanel" IsVisible="False" Margin="0,0,0,16">
+                            <TextBlock x:Name="PasswordStrengthLabel" FontSize="12" Height="20" Classes="muted"/>
+                            <ProgressBar x:Name="PasswordStrengthBar" Height="6" Minimum="0" Maximum="4" Value="0"/>
+                        </StackPanel>
+
+                        <Button x:Name="SwitchAuthModeButton" Classes="link" Click="SwitchAuthMode_Click" IsVisible="False"
+                                HorizontalAlignment="Left" Margin="0,0,0,12">
+                            <TextBlock x:Name="SwitchAuthModeLabel" FontSize="13" TextDecorations="Underline"
+                                       Text="{DynamicResource NoxText.NoAccount}"/>
+                        </Button>
+
+                        <ScrollViewer x:Name="AuthNotice" IsVisible="False" MaxHeight="112" Margin="0,0,0,12"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <TextBlock x:Name="AuthErrorTextBlock" Foreground="#FF6B6B" TextWrapping="Wrap"/>
+                        </ScrollViewer>
+
+                        <Panel>
+                            <Button x:Name="SignInButton" Classes="primary" IsDefault="True" Height="48" HorizontalAlignment="Stretch"
+                                    Content="{DynamicResource NoxText.Connect}" Click="SignInButton_Click"/>
+                            <Button x:Name="CreateAccountButton" Classes="primary" Height="48" HorizontalAlignment="Stretch"
+                                    Content="{DynamicResource NoxText.Register}" IsVisible="False" Click="CreateAccountButton_Click"/>
+                        </Panel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <ComboBox x:Name="LoginLanguageBox" Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Center"
+                      Width="120" MinHeight="30" Height="30" Margin="4,0,8,4" Background="Transparent" BorderThickness="0"
+                      Foreground="{StaticResource NoxTextMutedBrush}" Padding="10,0,4,0" FontSize="13"
+                      SelectionChanged="LoginLanguageBox_SelectionChanged">
+                <ComboBoxItem Tag="it" Content="Italiano"/>
+                <ComboBoxItem Tag="en" Content="English"/>
+            </ComboBox>
+            <TextBlock x:Name="ClientVersionLabel" Grid.Row="1" HorizontalAlignment="Left" VerticalAlignment="Center"
+                       Margin="16,0,0,4" FontSize="12" Foreground="{StaticResource NoxTextDisabledBrush}"/>
+        </Grid>
+
+        <!-- ================= DASHBOARD ================= -->
+        <Grid x:Name="MainShell" Grid.RowSpan="2" IsVisible="False" ColumnDefinitions="240,*">
+            <!-- Sidebar surface, also under the title bar -->
+            <Border Background="{StaticResource NoxSidebarBrush}" BorderBrush="{StaticResource NoxBorderBrush}" BorderThickness="0,0,1,0"/>
+
+            <!-- Sidebar: brand, navigation, account -->
+            <Grid Margin="0,34,0,0" RowDefinitions="Auto,*,Auto">
+                <StackPanel Orientation="Horizontal" Margin="24,14,16,0" IsHitTestVisible="False">
+                    <Image Source="avares://NOX/Assets/NoxLogo.png" Width="56" Height="56"/>
+                    <TextBlock Text="NOX" VerticalAlignment="Center" Margin="16,0,0,0" FontSize="35" FontWeight="Bold"/>
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Margin="16,22,16,0">
+                    <Button x:Name="NavSend" Classes="nav selected" Click="Nav_Click" Tag="0">
+                        <StackPanel Orientation="Horizontal">
+                            <Viewbox Width="18" Height="18" Margin="0,0,12,0"><Path Classes="icon" Data="{StaticResource NoxIconArrowUp}"/></Viewbox>
+                            <TextBlock Text="{DynamicResource NoxText.SendFiles}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="NavInbox" Classes="nav" Click="Nav_Click" Tag="1">
+                        <StackPanel Orientation="Horizontal">
+                            <Viewbox Width="18" Height="18" Margin="0,0,12,0"><Path Classes="icon" Data="{StaticResource NoxIconArrowDown}"/></Viewbox>
+                            <TextBlock Text="{DynamicResource NoxText.IncomingFiles}" VerticalAlignment="Center"/>
+                            <Ellipse x:Name="InboxPresenceIndicator" Width="8" Height="8" Margin="10,1,0,0" VerticalAlignment="Center"
+                                     Fill="{StaticResource NoxTextMutedBrush}"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="NavIdentity" Classes="nav" Click="Nav_Click" Tag="2">
+                        <StackPanel Orientation="Horizontal">
+                            <Viewbox Width="18" Height="18" Margin="0,0,12,0"><Path Classes="icon" Data="{StaticResource NoxIconShield}"/></Viewbox>
+                            <TextBlock Text="Fingerprint" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="NavContacts" Classes="nav" Click="Nav_Click" Tag="3">
+                        <StackPanel Orientation="Horizontal">
+                            <Viewbox Width="18" Height="18" Margin="0,0,12,0"><Path Classes="icon" Data="{StaticResource NoxIconUsers}"/></Viewbox>
+                            <TextBlock Text="{DynamicResource NoxText.TrustedContactsAlt}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <!-- Account card: hovering it (or keyboard focus inside) opens the menu above the user name. -->
+                <Border x:Name="AccountCard" Grid.Row="2" Margin="16,0,16,20" Padding="8" CornerRadius="12" BorderThickness="1"
+                        Background="{StaticResource NoxCardHoverBrush}">
+                    <StackPanel>
+                        <Border x:Name="AccountMenu" IsVisible="False" Opacity="0">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="8,2,0,6">
+                                    <Viewbox Width="14" Height="14" Margin="0,0,8,0"><Path Classes="icon" Data="{StaticResource NoxIconGlobe}"/></Viewbox>
+                                    <TextBlock Classes="label" Text="{DynamicResource NoxText.Language}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <Button x:Name="LanguageItButton" Classes="menu" Tag="it" Click="LanguageMenu_Click">
+                                    <DockPanel>
+                                        <Canvas Width="18" Height="12" Margin="0,0,10,0" VerticalAlignment="Center" ClipToBounds="True">
+                                            <Rectangle Width="6" Height="12" Fill="#009246"/>
+                                            <Rectangle Canvas.Left="6" Width="6" Height="12" Fill="#F1F2F1"/>
+                                            <Rectangle Canvas.Left="12" Width="6" Height="12" Fill="#CE2B37"/>
+                                        </Canvas>
+                                        <Viewbox x:Name="LanguageItCheck" DockPanel.Dock="Right" Width="14" Height="14" Opacity="0" Margin="8,0,0,0">
+                                            <Path Classes="icon" Data="{StaticResource NoxIconCheck}" StrokeThickness="2.5" Stroke="{StaticResource NoxAccentBrush}"/>
+                                        </Viewbox>
+                                        <TextBlock Text="Italiano" VerticalAlignment="Center"/>
+                                    </DockPanel>
+                                </Button>
+                                <Button x:Name="LanguageEnButton" Classes="menu" Tag="en" Click="LanguageMenu_Click">
+                                    <DockPanel>
+                                        <Canvas Width="18" Height="12" Margin="0,0,10,0" VerticalAlignment="Center" ClipToBounds="True">
+                                            <Rectangle Width="18" Height="12" Fill="#012169"/>
+                                            <Path Data="M0,0 L18,12 M18,0 L0,12" Stroke="#FFFFFF" StrokeThickness="2.4"/>
+                                            <Path Data="M0,0 L18,12 M18,0 L0,12" Stroke="#C8102E" StrokeThickness="0.8"/>
+                                            <Path Data="M9,0 V12 M0,6 H18" Stroke="#FFFFFF" StrokeThickness="3.6"/>
+                                            <Path Data="M9,0 V12 M0,6 H18" Stroke="#C8102E" StrokeThickness="2"/>
+                                        </Canvas>
+                                        <Viewbox x:Name="LanguageEnCheck" DockPanel.Dock="Right" Width="14" Height="14" Opacity="0" Margin="8,0,0,0">
+                                            <Path Classes="icon" Data="{StaticResource NoxIconCheck}" StrokeThickness="2.5" Stroke="{StaticResource NoxAccentBrush}"/>
+                                        </Viewbox>
+                                        <TextBlock Text="English" VerticalAlignment="Center"/>
+                                    </DockPanel>
+                                </Button>
+                                <Border Height="1" Margin="0,8" Background="{StaticResource NoxBorderBrush}"/>
+                                <Button x:Name="LogoutButton" Classes="menu" Height="40" Click="LogoutButton_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Viewbox Width="18" Height="18"><Path Classes="icon" Data="{StaticResource NoxIconSignOut}"/></Viewbox>
+                                        <TextBlock Text="{DynamicResource NoxText.Logout}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                    </StackPanel>
+                                </Button>
+                                <Border Height="1" Margin="0,8" Background="{StaticResource NoxBorderBrush}"/>
+                            </StackPanel>
+                        </Border>
+                        <Grid Margin="4" ColumnDefinitions="Auto,*,Auto">
+                            <Border Width="32" Height="32" CornerRadius="16" Background="{StaticResource NoxAccentMutedBrush}">
+                                <Viewbox Width="16" Height="16"><Path Classes="icon" Data="{StaticResource NoxIconUser}" Stroke="{StaticResource NoxAccentBrush}"/></Viewbox>
+                            </Border>
+                            <TextBlock x:Name="SignedInUserTextBlock" Grid.Column="1" Margin="10,0,8,0" FontWeight="SemiBold"
+                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                            <Viewbox x:Name="AccountChevron" Grid.Column="2" Width="14" Height="14" RenderTransformOrigin="50%,50%">
+                                <Viewbox.RenderTransform><RotateTransform Angle="180"/></Viewbox.RenderTransform>
+                                <Path Classes="icon" Data="{StaticResource NoxIconChevronDown}" StrokeThickness="2.2"/>
+                            </Viewbox>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Pages -->
+            <Panel Grid.Column="1" Margin="36,58,36,32">
+
+                <!-- ===== SEND ===== -->
+                <Grid x:Name="SendPage" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
+                    <TextBlock Classes="title" Text="{DynamicResource NoxText.SendFiles}" Margin="0,0,0,24" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Grid.Row="1" Classes="section" Text="{DynamicResource NoxText.Recipient}" Margin="0,0,0,12"/>
+
+                    <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
+                        <Grid x:Name="RecipientInput" Margin="0,0,8,0">
+                            <TextBox x:Name="RecipientUsernameTextBox" Padding="42,0,52,0"
+                                     Watermark="{DynamicResource NoxText.SearchForAUser}"
+                                     KeyDown="RecipientUsername_KeyDown" TextChanged="RecipientUsernameTextBox_TextChanged"/>
+                            <Viewbox IsHitTestVisible="False" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="14,0,0,0" Width="18" Height="18">
+                                <Path Classes="icon" Data="{StaticResource NoxIconSearch}"/>
+                            </Viewbox>
+                            <Button x:Name="TrustedRecipientsButton" Classes="iconButton" HorizontalAlignment="Right" Width="40" Height="38" Margin="0,0,4,0"
+                                    ToolTip.Tip="{DynamicResource NoxText.OpenTrustedContacts}">
+                                <Viewbox Width="16" Height="16"><Path Classes="icon" Data="{StaticResource NoxIconChevronDown}" StrokeThickness="2.2"/></Viewbox>
+                                <Button.Flyout>
+                                    <MenuFlyout Placement="BottomEdgeAlignedRight"/>
+                                </Button.Flyout>
+                            </Button>
+                        </Grid>
+                        <!-- Accent "Check"; once the recipient is verified the field locks and this becomes the amber pencil. -->
+                        <Button x:Name="CheckRecipientButton" Grid.Column="1" Classes="primary" Width="96" Height="46" Click="CheckRecipientButton_Click">
+                            <Panel>
+                                <TextBlock x:Name="CheckRecipientLabel" Text="{DynamicResource NoxText.Check}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                <Viewbox x:Name="CheckRecipientPencil" Width="18" Height="18" IsVisible="False">
+                                    <Path Classes="icon" Data="{StaticResource NoxIconEdit}"/>
+                                </Viewbox>
+                            </Panel>
+                        </Button>
+                    </Grid>
+
+                    <CheckBox x:Name="SendToSelfCheckBox" Grid.Row="3" Margin="0,12,0,0" HorizontalAlignment="Left"
+                              Foreground="{StaticResource NoxTextBrush}"
+                              Content="{DynamicResource NoxText.SendToMyAccount}" IsCheckedChanged="SendToSelfCheckBox_Changed"/>
+
+                    <TextBlock x:Name="RecipientStatusTextBlock" Grid.Row="4" Height="40" LineHeight="20" Margin="0,6,0,0"
+                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Classes="muted"
+                               ToolTip.Tip="{Binding $self.Text}"/>
+
+                    <Grid Grid.Row="5" Margin="0,4,0,12" ColumnDefinitions="Auto,*">
+                        <TextBlock Classes="section" Text="{DynamicResource NoxText.FilesToSend}" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="SelectedFilesStatusTextBlock" Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center"
+                                   FontSize="14" LineHeight="20" MaxHeight="40" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                   Classes="muted" ToolTip.Tip="{Binding $self.Text}"/>
+                    </Grid>
+
+                    <Border x:Name="DropZoneBorder" Grid.Row="6" Focusable="True" MinHeight="150" CornerRadius="16" IsEnabled="False"
+                            Background="Transparent" DragDrop.AllowDrop="True"
+                            KeyDown="DropZoneBorder_KeyDown" PointerReleased="DropZoneBorder_PointerReleased">
+                        <Panel>
+                            <Border x:Name="DropZoneSurface" CornerRadius="16" IsHitTestVisible="False"/>
+                            <Rectangle x:Name="DropZoneDash" StrokeThickness="2" StrokeDashArray="3,2.5" RadiusX="16" RadiusY="16"
+                                       IsHitTestVisible="False"/>
+                            <StackPanel x:Name="DropZonePromptPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20">
+                                <Viewbox Width="36" Height="36" Margin="0,0,0,12" HorizontalAlignment="Center">
+                                    <Path x:Name="DropZoneIcon" Classes="icon" Data="{StaticResource NoxIconUpload}" StrokeThickness="1.8"/>
+                                </Viewbox>
+                                <TextBlock x:Name="DropZonePromptTextBlock" Text="{DynamicResource NoxText.SelectARecipient}"
+                                           TextAlignment="Center" TextWrapping="Wrap" HorizontalAlignment="Center"
+                                           FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Classes="label" Text="{DynamicResource NoxText.Maximum20Files}" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                            </StackPanel>
+                            <ScrollViewer x:Name="SelectedFilesScroll" Margin="12" IsVisible="False" HorizontalScrollBarVisibility="Disabled">
+                                <ItemsControl x:Name="SelectedFilesItemsControl" VerticalAlignment="Top">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Margin="0,0,0,8" Padding="14,10" CornerRadius="12" BorderThickness="1"
+                                                    Background="{StaticResource NoxCardBrush}" BorderBrush="{StaticResource NoxBorderBrush}">
+                                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                                    <Viewbox Width="22" Height="22" VerticalAlignment="Center">
+                                                        <Path Classes="icon" Data="{Binding Icon}" StrokeThickness="1.8"/>
+                                                    </Viewbox>
+                                                    <TextBlock Grid.Column="1" Text="{Binding Name}" Margin="14,0,12,0" VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis" FontWeight="SemiBold"/>
+                                                    <TextBlock Grid.Column="2" Text="{Binding Size}" VerticalAlignment="Center" Classes="muted"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Panel>
+                    </Border>
+
+                    <Grid Grid.Row="7" Margin="0,16,0,0" ColumnDefinitions="Auto,*">
+                        <Button x:Name="SendEncryptedButton" Classes="primary" Width="200" Height="48" HorizontalAlignment="Left"
+                                IsEnabled="False" Click="SendEncryptedButton_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <Viewbox Width="16" Height="16" Margin="0,0,10,0"><Path Classes="icon" Data="{StaticResource NoxIconLock}"/></Viewbox>
+                                <TextBlock x:Name="SendButtonLabel" Text="{DynamicResource NoxText.Send}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <ProgressBar x:Name="SendProgressBar" Grid.Column="1" VerticalAlignment="Center" Margin="16,0,0,0" Height="8"
+                                     Minimum="0" Maximum="100" Value="0" IsVisible="False"/>
+                    </Grid>
+                </Grid>
+
+                <!-- ===== INBOX ===== -->
+                <Grid x:Name="InboxPage" IsVisible="False" RowDefinitions="Auto,Auto,*,Auto">
+                    <TextBlock Classes="title" Text="{DynamicResource NoxText.IncomingFiles}" Margin="0,0,0,24" TextTrimming="CharacterEllipsis"/>
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,16">
+                        <Button x:Name="RefreshInboxButton" Width="130" Height="46" Content="{DynamicResource NoxText.Refresh}" Click="RefreshInboxButton_Click"/>
+                        <Button x:Name="DownloadDecryptButton" Classes="primary" Margin="12,0,0,0" Width="170" Height="46"
+                                Content="{DynamicResource NoxText.Download}" IsEnabled="False" Click="DownloadDecryptButton_Click"/>
+                    </StackPanel>
+                    <Border x:Name="InboxEmptyState" Grid.Row="2" CornerRadius="16" BorderThickness="1" MinHeight="120"
+                            BorderBrush="{StaticResource NoxBorderBrush}" Background="{StaticResource NoxSidebarBrush}">
+                        <Viewbox Width="40" Height="40">
+                            <Path Classes="icon" Data="{StaticResource NoxIconInbox}" StrokeThickness="1.6" Stroke="{StaticResource NoxTextDisabledBrush}"/>
+                        </Viewbox>
+                    </Border>
+                    <ListBox x:Name="InboxListBox" Grid.Row="2" Classes="cards" IsVisible="False"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled" SelectionChanged="InboxListBox_SelectionChanged">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnDefinitions="Auto,*">
+                                    <Border Width="40" Height="40" CornerRadius="20" VerticalAlignment="Center" Background="{StaticResource NoxAccentMutedBrush}">
+                                        <Viewbox Width="18" Height="18"><Path Classes="icon" Data="{StaticResource NoxIconInbox}" Stroke="{StaticResource NoxAccentBrush}"/></Viewbox>
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Text="{Binding}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="14,0,0,0"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Border Grid.Row="3" Margin="0,16,0,0" Classes="card" Padding="20,16">
+                        <StackPanel>
+                            <DockPanel Margin="0,0,0,12">
+                                <Viewbox Width="20" Height="20" Margin="0,0,12,0"><Path Classes="icon" Data="{StaticResource NoxIconFolder}" Stroke="{StaticResource NoxAccentBrush}"/></Viewbox>
+                                <TextBlock Classes="section" Text="{DynamicResource NoxText.DefaultFolder}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                            </DockPanel>
+                            <CheckBox x:Name="UseDefaultDownloadDirectoryCheckBox" Content="{DynamicResource NoxText.SaveToTheDefaultFolder}"
+                                      HorizontalAlignment="Left" IsCheckedChanged="UseDefaultDownloadDirectoryCheckBox_Changed"/>
+                            <Grid Margin="0,10,0,0">
+                                <TextBox x:Name="DefaultDownloadDirectoryTextBox" Padding="14,0,52,0" IsReadOnly="True"
+                                         Watermark="{DynamicResource NoxText.DefaultFolder}"/>
+                                <Button x:Name="ChooseDefaultDownloadDirectoryButton" Classes="iconButton" HorizontalAlignment="Right"
+                                        Width="38" Height="38" Margin="0,0,4,0" ToolTip.Tip="{DynamicResource NoxText.ChooseDefaultFolder}"
+                                        Click="ChooseDefaultDownloadDirectoryButton_Click">
+                                    <Viewbox Width="18" Height="18"><Path Classes="icon" Data="{StaticResource NoxIconFolder}"/></Viewbox>
+                                </Button>
+                            </Grid>
+                            <TextBlock x:Name="InboxStatusTextBlock" Margin="0,12,0,0" TextWrapping="Wrap" Classes="muted"/>
+                            <ProgressBar x:Name="InboxProgressBar" Margin="0,12,0,0" Height="8" Minimum="0" Maximum="100" Value="0" IsVisible="False"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- ===== IDENTITY ===== -->
+                <Grid x:Name="IdentityPage" IsVisible="False" RowDefinitions="Auto,Auto">
+                    <TextBlock Classes="title" Text="{DynamicResource NoxText.Identity}" Margin="0,0,0,28"/>
+                    <Border Grid.Row="1" Classes="card" Padding="24">
+                        <StackPanel>
+                            <TextBlock x:Name="IdentityUsername" FontSize="20" FontWeight="SemiBold"/>
+                            <TextBlock Classes="label" Text="{DynamicResource NoxText.FullFingerprint}" Margin="0,6,0,16"/>
+                            <ItemsControl x:Name="IdentityFingerprint">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="4"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{StaticResource NoxWindowBrush}" BorderBrush="{StaticResource NoxBorderBrush}" BorderThickness="1"
+                                                CornerRadius="10" Margin="4" Padding="10">
+                                            <TextBlock Text="{Binding}" FontFamily="{StaticResource NoxMonoFontFamily}" FontSize="20" HorizontalAlignment="Center"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Button HorizontalAlignment="Left" Margin="0,20,0,0" Padding="16,0" Click="CopyIdentity_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <Viewbox Width="16" Height="16"><Path Classes="icon" Data="{StaticResource NoxIconCopy}"/></Viewbox>
+                                    <TextBlock x:Name="CopyIdentityLabel" Text="{DynamicResource NoxText.Copy}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- ===== TRUSTED CONTACTS ===== -->
+                <Grid x:Name="ContactsPage" IsVisible="False" RowDefinitions="Auto,*,Auto">
+                    <TextBlock Classes="title" Text="{DynamicResource NoxText.TrustedContactsAlt}" Margin="0,0,0,28"/>
+                    <ListBox x:Name="TrustedContactsListBox" Grid.Row="1" Classes="cards" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             SelectionChanged="TrustedContactsListBox_SelectionChanged">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnDefinitions="Auto,*">
+                                    <Border Width="40" Height="40" CornerRadius="20" VerticalAlignment="Top" Background="{StaticResource NoxRaisedBrush}">
+                                        <Viewbox Width="18" Height="18"><Path Classes="icon" Data="{StaticResource NoxIconUser}"/></Viewbox>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="14,0,0,0">
+                                        <TextBlock Text="{Binding Username}" FontWeight="SemiBold" Margin="0,10,0,8" TextTrimming="CharacterEllipsis"/>
+                                        <ItemsControl ItemsSource="{Binding Groups}">
+                                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="4"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Background="{StaticResource NoxWindowBrush}" CornerRadius="6" Margin="2" Padding="4,3">
+                                                        <TextBlock Text="{Binding}" FontFamily="{StaticResource NoxMonoFontFamily}" FontSize="13"
+                                                                   HorizontalAlignment="Center" Foreground="{StaticResource NoxTextMutedBrush}"/>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <DockPanel Grid.Row="2" Margin="0,16,0,0">
+                        <Button x:Name="RemoveTrustedContactButton" DockPanel.Dock="Right" Padding="16,0" IsEnabled="False" Click="RemoveTrustedContactButton_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <Viewbox Width="16" Height="16"><Path Classes="icon" Data="{StaticResource NoxIconTrash}"/></Viewbox>
+                                <TextBlock Text="{DynamicResource NoxText.RemoveContact}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                            </StackPanel>
+                        </Button>
+                        <TextBlock x:Name="ContactsStatus" VerticalAlignment="Center" Classes="muted"/>
+                    </DockPanel>
+                </Grid>
+            </Panel>
+        </Grid>
+    </Grid>
+</Window>
