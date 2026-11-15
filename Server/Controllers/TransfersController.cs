@@ -391,7 +391,9 @@ namespace Server.Controllers
                 return Conflict("Transfer is not pending.");
 
             _logger.LogWarning(
-                "Recipient {RecipientId} reported AES-GCM authentication failure for transfer {TransferId}. The transfer will be deleted.",
+                Logging.ServerText.L(
+                    "[Tampering] Recipient {RecipientId} reported an AES-GCM authentication failure for transfer {TransferId}: the transfer is deleted.",
+                    "[Manomissione] Il destinatario {RecipientId} ha segnalato un errore di autenticazione AES-GCM per il transfer {TransferId}: il transfer viene eliminato."),
                 recipient.Id,
                 transfer.Id);
 

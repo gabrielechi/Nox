@@ -109,6 +109,7 @@ namespace Client.Windows
             LoadClientAppSettings(settings);
             _suppressRememberServerChange = false;
             InitializeAuthWindowLayout();
+            InitializePasswordFields();
             InitializePasswordStrength();
             InitializeUpdateCheck();
             InitializeAccountMenu();
@@ -315,7 +316,7 @@ namespace Client.Windows
                     await System.Windows.Threading.Dispatcher.Yield(DispatcherPriority.Background);
                     bool exists = await _apiClient.UsernameExistsAsync(username);
                     SetUsernameChoice(exists ? true : null);
-                    if (exists) PasswordBox.Focus();
+                    if (exists) FocusPasswordField();
                     else AuthErrorTextBlock.Text = Texts.T("LoginError");
                 }
                 catch (Exception ex)
@@ -445,6 +446,8 @@ namespace Client.Windows
                 SwitchAuthModeButton.IsEnabled = !busy;
             ServerUrlTextBox.IsReadOnly = UsernameTextBox.IsReadOnly = busy;
             PasswordBox.IsEnabled = !busy && _usernameExists.HasValue;
+            ConfirmPasswordBox.IsEnabled = !busy && _usernameExists == false;
+            ShowPasswordCheckBox.IsEnabled = !busy;
             UpdateRegistrationHint();
         }
 
@@ -452,9 +455,13 @@ namespace Client.Windows
         {
             if (_usernameExists != exists) PrepareAuthTransition();
             _usernameExists = exists;
-            PasswordBox.Clear();
-            PasswordLabelTextBlock.Visibility = PasswordBox.Visibility = exists.HasValue ? Visibility.Visible : Visibility.Collapsed;
+            ClearPasswordFields();
+            PasswordLabelTextBlock.Visibility = PasswordField.Visibility = ShowPasswordCheckBox.Visibility =
+                exists.HasValue ? Visibility.Visible : Visibility.Collapsed;
+            ConfirmPasswordLabelTextBlock.Visibility = ConfirmPasswordField.Visibility =
+                exists == false ? Visibility.Visible : Visibility.Collapsed;
             PasswordBox.IsEnabled = exists.HasValue;
+            ConfirmPasswordBox.IsEnabled = exists == false;
             SignInButton.Visibility = exists == false ? Visibility.Collapsed : Visibility.Visible;
             CreateAccountButton.Visibility = exists == false ? Visibility.Visible : Visibility.Collapsed;
             CreateAccountButton.IsDefault = exists == false;
@@ -476,7 +483,7 @@ namespace Client.Windows
             AuthErrorTextBlock.Text = string.Empty;
             if (string.IsNullOrWhiteSpace(UsernameTextBox.Text) || _usernameExists is null)
                 UsernameTextBox.Focus();
-            else PasswordBox.Focus();
+            else FocusPasswordField();
         }
 
         private void RegistrationPassword_Changed(object sender, RoutedEventArgs e)
@@ -496,10 +503,18 @@ namespace Client.Windows
                 return;
             }
 
-            string missing = MissingPasswordRequirements(PasswordBox.Password);
-            bool valid = missing.Length == 0;
-            RegistrationPasswordHint.Text = valid ? Texts.T("PasswordMeetsTheRequirements") : Texts.T("StillNeeded", missing);
+            string password = PasswordBox.Password;
+            string confirmation = ConfirmPasswordBox?.Password ?? string.Empty;
+            string missing = MissingPasswordRequirements(password);
+            bool mismatch = confirmation.Length > 0 && confirmation != password;
+            bool valid = missing.Length == 0 && confirmation == password;
+            // First the requirements, then the second password: one message at a time.
+            RegistrationPasswordHint.Text = missing.Length > 0 ? Texts.T("StillNeeded", missing)
+                : mismatch ? Texts.T("PasswordsDoNotMatch")
+                : !valid ? Texts.T("RepeatThePasswordToConfirmIt")
+                : Texts.T("PasswordMeetsTheRequirements");
             RegistrationPasswordHint.Foreground = valid ? System.Windows.Media.Brushes.LightGreen
+                : missing.Length == 0 && mismatch ? System.Windows.Media.Brushes.IndianRed
                 : (System.Windows.Media.Brush)FindResource("TextMutedBrush");
             RegistrationPasswordHint.Visibility = Visibility.Visible;
             CreateAccountButton.IsEnabled = valid && ServerSchemeBox.IsEnabled;
@@ -579,6 +594,16 @@ namespace Client.Windows
 
         private void UsernameTextBox_Changed(object sender, TextChangedEventArgs e)
         {
+            // Usernames cannot contain spaces: they are dropped as soon as they are typed or pasted.
+            // Setting Text raises this handler again with the cleaned value.
+            if (sender is TextBox box && box.Text.Any(char.IsWhiteSpace))
+            {
+                int caret = box.CaretIndex - box.Text[..Math.Min(box.CaretIndex, box.Text.Length)].Count(char.IsWhiteSpace);
+                box.Text = new string(box.Text.Where(character => !char.IsWhiteSpace(character)).ToArray());
+                box.CaretIndex = Math.Clamp(caret, 0, box.Text.Length);
+                return;
+            }
+
             if (!_isServerConnectionVerified) return;
             if (_usernameExists != false) SetUsernameChoice(null);
             else QueuePasswordStrength();
@@ -722,7 +747,7 @@ namespace Client.Windows
                 return;
             }
 
-            if (MissingPasswordRequirements(password).Length != 0)
+            if (MissingPasswordRequirements(password).Length != 0 || ConfirmPasswordBox.Password != password)
             {
                 UpdateRegistrationHint();
                 return;
@@ -2059,6 +2084,7 @@ namespace Client.Windows
         {
             SelectedFilesStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
             var pendingEncryptedFiles = new List<PendingEncryptedFile>();
+            ProgressTicker? sendTicker = null;
 
             if (_session is null)
             {
@@ -2104,9 +2130,19 @@ namespace Client.Windows
                 if (_currentRecipientBundle is not { } verifiedBundle || !IsCurrentRecipientTrustedForSend())
                     throw new InvalidOperationException(Texts.T("CheckAndVerifyTheRecipientFirst"));
                 SelectedFilesStatusTextBlock.Text = Texts.T("DerivingTheX3DHSecret");
-                int totalSendSteps = (_selectedFilePaths.Count * 2) + 1;
-                int completedSendSteps = 0;
-                ShowProgress(SendProgressBar, totalSendSteps);
+                // Progress by bytes (encryption + upload), so the bar keeps moving on large files.
+                long plaintextTotal = _selectedFilePaths.Sum(path => new FileInfo(path).Length);
+                long ciphertextTotal = _selectedFilePaths.Sum(path => TransferProgress.CiphertextLength(new FileInfo(path).Length));
+                var sendProgress = new TransferProgress(plaintextTotal + ciphertextTotal);
+                var uploadProgress = new TransferProgress(ciphertextTotal);
+                string sendPhase = SelectedFilesStatusTextBlock.Text ?? string.Empty;
+                bool showUploadedBytes = false;
+                ShowProgress(SendProgressBar, 1000);
+                sendTicker = new ProgressTicker(() =>
+                {
+                    UpdateProgress(SendProgressBar, sendProgress.Permille);
+                    SelectedFilesStatusTextBlock.Text = WithProgress(sendPhase, sendProgress,showUploadedBytes ? uploadProgress : null);
+                });
 
                 X3dhPreKeyBundle recipientBundle = ToX3dhPreKeyBundle(verifiedBundle);
 
@@ -2128,7 +2164,7 @@ namespace Client.Windows
                     string filePath = _selectedFilePaths[fileIndex];
                     var fileInfo = new FileInfo(filePath);
 
-                    SelectedFilesStatusTextBlock.Text = Texts.T("EncryptingAlt", fileInfo.Name);
+                    sendPhase = Texts.T("EncryptingAlt", fileInfo.Name);
 
                     FileDerivedKeys fileKeys = _fileKeyDerivationService.DeriveFileKeys(
                         x3dhResult.RootKey,
@@ -2158,10 +2194,11 @@ namespace Client.Windows
                         bufferSize: 1024 * 64,
                         useAsync: true))
                     {
-                        await _fileContentEncryptionService.EncryptAsync(
-                            plaintextStream,
+                        var countedPlaintext = new ProgressReadStream(plaintextStream, sendProgress);
+                        await Task.Run(() => _fileContentEncryptionService.EncryptAsync(
+                            countedPlaintext,
                             encryptedStream,
-                            fileKeys.FileKey);
+                            fileKeys.FileKey));
                     }
 
                     long ciphertextLength = new FileInfo(tempEncryptedFilePath).Length;
@@ -2174,11 +2211,9 @@ namespace Client.Windows
                         CiphertextLength = ciphertextLength
                     });
 
-                    completedSendSteps++;
-                    UpdateProgress(SendProgressBar, completedSendSteps);
                 }
 
-                SelectedFilesStatusTextBlock.Text = Texts.T("StartingTransfer");
+                sendPhase = Texts.T("StartingTransfer");
 
                 if (!ReferenceEquals(verifiedBundle, _currentRecipientBundle) || !IsCurrentRecipientTrustedForSend())
                     throw new InvalidOperationException(Texts.T("CheckAndVerifyTheRecipientFirst"));
@@ -2199,15 +2234,14 @@ namespace Client.Windows
                 CreateTransferResponse createTransferResponse = await _apiClient.CreateTransferAsync(
                     createTransferRequest);
 
-                completedSendSteps++;
-                UpdateProgress(SendProgressBar, completedSendSteps);
 
                 foreach (PendingEncryptedFile encryptedFile in pendingEncryptedFiles)
                 {
                     CreateTransferFileResponse serverFile = createTransferResponse.Files
                         .Single(file => file.FileIndex == encryptedFile.FileIndex);
 
-                    SelectedFilesStatusTextBlock.Text = Texts.T("UploadingFile", encryptedFile.FileIndex + 1, pendingEncryptedFiles.Count);
+                    sendPhase = Texts.T("UploadingFile", encryptedFile.FileIndex + 1, pendingEncryptedFiles.Count);
+                    showUploadedBytes = true;
 
                     await using var encryptedFileStream = new FileStream(
                         encryptedFile.TempEncryptedFilePath,
@@ -2220,13 +2254,13 @@ namespace Client.Windows
                     await _apiClient.UploadTransferFileContentAsync(
                         createTransferResponse.TransferId,
                         serverFile.FileId,
-                        encryptedFileStream,
+                        new ProgressReadStream(encryptedFileStream, sendProgress, uploadProgress),
                         encryptedFile.CiphertextLength);
 
-                    completedSendSteps++;
-                    UpdateProgress(SendProgressBar, completedSendSteps);
                 }
 
+                sendTicker.Dispose();
+                UpdateProgress(SendProgressBar, 1000);
                 SelectedFilesStatusTextBlock.Text =
                     Texts.T("SentExpires", TransferExpiryFormatter.Format(createTransferResponse.ExpiresAtUtc));
 
@@ -2238,15 +2272,16 @@ namespace Client.Windows
                 DropZonePromptTextBlock.Text = DropZoneBorder.IsEnabled
                     ? DropZoneReadyText
                     : DropZoneDisabledText;
-                UpdateProgress(SendProgressBar, totalSendSteps);
             }
             catch (Exception ex)
             {
+                sendTicker?.Dispose();
                 SelectedFilesStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
                 SelectedFilesStatusTextBlock.Text = GetUserFacingError(ex);
             }
             finally
             {
+                sendTicker?.Dispose();
                 foreach (PendingEncryptedFile pendingFile in pendingEncryptedFiles)
                 {
                     if (File.Exists(pendingFile.TempEncryptedFilePath))
@@ -2315,6 +2350,7 @@ namespace Client.Windows
 
             TransferSummaryResponse selectedTransfer = _inboxTransfers[InboxListBox.SelectedIndex];
             ClientOneTimePreKeyState? transferOneTimePreKey = null;
+            ProgressTicker? downloadTicker = null;
             _isDownloading = true;
             ++_inboxRevision;
             RefreshInboxButton.IsEnabled = false;
@@ -2357,10 +2393,15 @@ namespace Client.Windows
                 TransferDetailResponse transferDetail = await _apiClient.GetTransferDetailAsync(
                     selectedTransfer.TransferId);
 
-                int totalInboxSteps = (transferDetail.Files.Count * 2) + 2;
-                int completedInboxSteps = 1;
-                ShowProgress(InboxProgressBar, totalInboxSteps);
-                UpdateProgress(InboxProgressBar, completedInboxSteps);
+                // Progress by bytes received (each file is decrypted while it downloads).
+                var downloadProgress = new TransferProgress(transferDetail.Files.Sum(file => file.CiphertextLength));
+                string downloadPhase = InboxStatusTextBlock.Text ?? string.Empty;
+                ShowProgress(InboxProgressBar, 1000);
+                downloadTicker = new ProgressTicker(() =>
+                {
+                    UpdateProgress(InboxProgressBar, downloadProgress.Permille);
+                    InboxStatusTextBlock.Text = WithProgress(downloadPhase, downloadProgress, downloadProgress);
+                });
 
                 X3dhMessageHeader x3dhHeader = _x3dhHeaderSerializer.Deserialize(
                     transferDetail.X3dhHeader);
@@ -2408,7 +2449,7 @@ namespace Client.Windows
                 {
                     foreach (TransferFileResponse file in transferDetail.Files.OrderBy(file => file.FileIndex))
                     {
-                        InboxStatusTextBlock.Text = Texts.T("DownloadingFile", file.FileIndex + 1, transferDetail.Files.Count);
+                        downloadPhase = Texts.T("DownloadingFile", file.FileIndex + 1, transferDetail.Files.Count);
 
                         FileDerivedKeys fileKeys = _fileKeyDerivationService.DeriveFileKeys(
                             recipientSecret.RootKey,
@@ -2434,14 +2475,12 @@ namespace Client.Windows
                         await _apiClient.ProcessTransferFileContentAsync(
                             transferDetail.TransferId,
                             file.FileId,
-                            (source, token) => fileDownload.DecryptToStagingFileAsync(
-                                source, tempPlaintextFilePath, fileKeys.FileKey,
-                                metadata.PlaintextLength, token));
+                            (source, token) => Task.Run(() => fileDownload.DecryptToStagingFileAsync(
+                                new ProgressReadStream(source, downloadProgress), tempPlaintextFilePath, fileKeys.FileKey,
+                                metadata.PlaintextLength, token), token));
 
                         stagedFiles.Add((tempPlaintextFilePath, outputPath));
 
-                        completedInboxSteps += 2;
-                        UpdateProgress(InboxProgressBar, completedInboxSteps);
                     }
 
                     foreach ((string stagedPath, string outputPath) in stagedFiles)
@@ -2455,6 +2494,9 @@ namespace Client.Windows
                         Directory.Delete(stagingDirectory, recursive: true);
                 }
 
+                downloadTicker.Dispose();
+                UpdateProgress(InboxProgressBar, 1000);
+
                 // Keep the decryption key if the server cannot acknowledge a long download.
                 await _apiClient.MarkTransferDownloadedAsync(transferDetail.TransferId);
 
@@ -2466,15 +2508,13 @@ namespace Client.Windows
                     await SaveVaultAsync(_sessionPassword);
                 }
 
-                completedInboxSteps++;
-                UpdateProgress(InboxProgressBar, completedInboxSteps);
-
                 InboxStatusTextBlock.Text = Texts.T("FileDownloadedDecryptedAndRemovedFrom");
 
                 await RefreshInboxAsync(allowDuringDownload: true);
             }
             catch (System.Security.Cryptography.AuthenticationTagMismatchException)
             {
+                downloadTicker?.Dispose();
                 bool removedFromServer = false;
 
                 try
@@ -2507,11 +2547,13 @@ namespace Client.Windows
             }
             catch (Exception ex)
             {
+                downloadTicker?.Dispose();
                 InboxStatusTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
                 InboxStatusTextBlock.Text = GetUserFacingError(ex);
             }
             finally
             {
+                downloadTicker?.Dispose();
                 _isDownloading = false;
                 RefreshInboxButton.IsEnabled = !_isManualInboxRefresh;
                 InboxListBox.IsEnabled = true;
@@ -2747,7 +2789,7 @@ namespace Client.Windows
 
             AuthErrorTextBlock.Text = string.Empty;
             AuthErrorTextBlock.Foreground = System.Windows.Media.Brushes.IndianRed;
-            PasswordBox.Clear();
+            ClearPasswordFields();
             ResetServerConnectionState();
 
             MainShell.Visibility = Visibility.Collapsed;

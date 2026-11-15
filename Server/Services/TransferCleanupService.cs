@@ -34,7 +34,8 @@ namespace Server.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error while cleaning expired transfers.");
+                    _logger.LogError(ex, Logging.ServerText.L("[Cleanup] Error while removing expired transfers.",
+                        "[Pulizia] Errore durante la rimozione dei trasferimenti scaduti."));
                 }
 
                 await Task.Delay(CleanupInterval, stoppingToken);
@@ -73,7 +74,8 @@ namespace Server.Services
                 await dbContext.SaveChangesAsync(cancellationToken);
 
                 _logger.LogInformation(
-                    "Cleaned {ExpiredTransferCount} expired transfers.",
+                    Logging.ServerText.L("[Cleanup] {ExpiredTransferCount} expired transfers removed.",
+                        "[Pulizia] {ExpiredTransferCount} trasferimenti scaduti rimossi."),
                     expiredTransfers.Count);
             }
         }

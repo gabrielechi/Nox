@@ -9,7 +9,9 @@ namespace Client.Windows;
 public partial class MainWindow
 {
     private const double AuthHeaderHeight = 100;
-    private const double AuthMaximumContentHeight = 720;
+    // Tallest sign-in content: registration (password, repeat password, show password, hint, strength)
+    // with the error box full (measured 867). Small screens scale everything so that it still fits.
+    private const double AuthMaximumContentHeight = 870;
     private const double AuthWindowChromeHeight = 34;
     private const double AuthFooterHeight = 38;
     private bool _authLayoutReady;

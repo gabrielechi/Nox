@@ -166,12 +166,42 @@
                                    Text="{DynamicResource NoxText.Password}"
                                    Style="{StaticResource NoxLabelText}"
                                    Visibility="Collapsed" />
-                        <PasswordBox x:Name="PasswordBox"
-                                     PasswordChanged="RegistrationPassword_Changed"
-                                     Margin="0,6,0,12"
-                                     Height="46"
-                                     Visibility="Collapsed"
-                                     IsEnabled="False" />
+                        <!-- Password; with "Show password" the same text is shown in the TextBox on top of it. -->
+                        <Grid x:Name="PasswordField" Margin="0,6,0,12" Visibility="Collapsed">
+                            <PasswordBox x:Name="PasswordBox"
+                                         PasswordChanged="RegistrationPassword_Changed"
+                                         Height="46"
+                                         IsEnabled="False" />
+                            <TextBox x:Name="PasswordRevealBox" Height="46" Visibility="Collapsed"
+                                     IsEnabled="{Binding IsEnabled, ElementName=PasswordBox}"
+                                     AutomationProperties.Name="{DynamicResource NoxText.Password}"/>
+                        </Grid>
+
+                        <!-- Registration only: the password typed a second time must match. -->
+                        <TextBlock x:Name="ConfirmPasswordLabelTextBlock"
+                                   Text="{DynamicResource NoxText.ConfirmPassword}"
+                                   Style="{StaticResource NoxLabelText}"
+                                   Visibility="Collapsed" />
+                        <Grid x:Name="ConfirmPasswordField" Margin="0,6,0,12" Visibility="Collapsed">
+                            <PasswordBox x:Name="ConfirmPasswordBox"
+                                         PasswordChanged="ConfirmPassword_Changed"
+                                         Height="46"
+                                         IsEnabled="False"
+                                         AutomationProperties.Name="{DynamicResource NoxText.ConfirmPassword}"/>
+                            <TextBox x:Name="ConfirmPasswordRevealBox" Height="46" Visibility="Collapsed"
+                                     IsEnabled="{Binding IsEnabled, ElementName=ConfirmPasswordBox}"
+                                     AutomationProperties.Name="{DynamicResource NoxText.ConfirmPassword}"/>
+                        </Grid>
+
+                        <CheckBox x:Name="ShowPasswordCheckBox"
+                                  Content="{DynamicResource NoxText.ShowPassword}"
+                                  Margin="0,0,0,12"
+                                  HorizontalAlignment="Left"
+                                  FontSize="14"
+                                  Foreground="{StaticResource TextMutedBrush}"
+                                  Visibility="Collapsed"
+                                  Checked="ShowPassword_Changed"
+                                  Unchecked="ShowPassword_Changed" />
                         <TextBlock x:Name="RegistrationPasswordHint" Visibility="Collapsed" Height="74" TextWrapping="Wrap"
                                    FontSize="12" LineHeight="18" LineStackingStrategy="BlockLineHeight" Margin="0,0,0,8"
                                    AutomationProperties.LiveSetting="Polite"/>

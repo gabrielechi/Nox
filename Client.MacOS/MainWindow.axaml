@@ -65,6 +65,8 @@
 
         <!-- ================= AUTH SCREEN ================= -->
         <Grid x:Name="AuthScreen" Grid.Row="1" RowDefinitions="*,38">
+            <!-- On a short screen the window stops at the screen height and the sign-in card scrolls. -->
+            <ScrollViewer x:Name="AuthScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
             <StackPanel x:Name="AuthSurface" Width="416" HorizontalAlignment="Center" VerticalAlignment="Top">
                 <StackPanel x:Name="AuthBrand" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,4,0,24">
                     <Image Source="avares://NOX/Assets/NoxLogo.png" Width="72" Height="72"/>
@@ -106,7 +108,17 @@
 
                         <TextBlock x:Name="PasswordLabelTextBlock" Classes="label" Text="{DynamicResource NoxText.Password}" IsVisible="False"/>
                         <TextBox x:Name="PasswordBox" PasswordChar="•" Margin="0,6,0,12" Height="46" IsVisible="False" IsEnabled="False"
+                                 RevealPassword="{Binding #ShowPasswordCheckBox.IsChecked}"
                                  TextChanged="RegistrationPassword_Changed"/>
+
+                        <!-- Registration only: the password typed a second time must match. -->
+                        <TextBlock x:Name="ConfirmPasswordLabelTextBlock" Classes="label" Text="{DynamicResource NoxText.ConfirmPassword}" IsVisible="False"/>
+                        <TextBox x:Name="ConfirmPasswordBox" PasswordChar="•" Margin="0,6,0,12" Height="46" IsVisible="False" IsEnabled="False"
+                                 RevealPassword="{Binding #ShowPasswordCheckBox.IsChecked}"
+                                 TextChanged="ConfirmPassword_Changed"/>
+
+                        <CheckBox x:Name="ShowPasswordCheckBox" Content="{DynamicResource NoxText.ShowPassword}" Margin="0,0,0,12"
+                                  HorizontalAlignment="Left" IsVisible="False"/>
                         <TextBlock x:Name="RegistrationPasswordHint" IsVisible="False" MinHeight="40" TextWrapping="Wrap"
                                    FontSize="12" LineHeight="18" Margin="0,0,0,8"/>
 
@@ -135,6 +147,7 @@
                     </StackPanel>
                 </Border>
             </StackPanel>
+            </ScrollViewer>
 
             <ComboBox x:Name="LoginLanguageBox" Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Center"
                       Width="120" MinHeight="30" Height="30" Margin="4,0,8,4" Background="Transparent" BorderThickness="0"

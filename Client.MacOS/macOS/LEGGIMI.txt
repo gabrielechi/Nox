@@ -23,14 +23,15 @@ Crea publish/NOX-macOS-arm64/NOX.app, gia' firmata per l'uso locale.
 
 Installazione da Terminale (senza i comandi qui sopra)
 ------------------------------------------------------
-install-nox.sh scarica NOX con curl (che non applica la quarantena di macOS),
-controlla lo SHA-256, mette NOX.app in /Applications e la apre:
+install-nox.sh scarica NOX con curl (che non applica la quarantena di macOS) dalla
+release piu' recente che contiene la versione per Mac (le release con il solo setup
+Windows vengono saltate), controlla lo SHA-256, mette NOX.app in /Applications e la apre:
 
-     curl -fsSL https://github.com/gabrielechi/Nox/releases/latest/download/install-nox.sh | bash
+     curl -fsSL https://raw.githubusercontent.com/gabrielechi/Nox/main/install-nox.sh | bash
 
 Disinstallazione (le impostazioni in ~/Library/Application Support/NOX restano):
 
-     curl -fsSL https://github.com/gabrielechi/Nox/releases/latest/download/install-nox.sh | bash -s -- --uninstall
+     curl -fsSL https://raw.githubusercontent.com/gabrielechi/Nox/main/install-nox.sh | bash -s -- --uninstall
 
 Pubblicare una nuova versione per Mac
 -------------------------------------
@@ -43,5 +44,8 @@ Pubblicare una nuova versione per Mac
      install-nox.sh               (questo script)
    NOX su Mac propone l'aggiornamento solo se la release contiene sia lo zip
    sia install-nox.sh; una release con il solo .exe non viene proposta al Mac.
-Lo zip di publish-from-windows.ps1 ha il numero di versione nel nome: rinominalo
-in NOX-macOS-arm64.zip e crea il .sha256 (shasum -a 256 NOX-macOS-arm64.zip).
+3. Se install-nox.sh e' cambiato, aggiorna anche la copia nella radice del branch
+   main di github.com/gabrielechi/Nox: e' quella usata dal comando curl qui sopra.
+Da Windows, publish-from-windows.ps1 crea gli stessi tre file da allegare in
+publish/NOX-macOS-arm64-release-<versione>/ (lo zip con la versione nel nome, in
+publish/, e' quello da passare a mano con LEGGIMI.txt).

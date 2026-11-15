@@ -11,6 +11,7 @@ using Server.Entities.PreKeys;
 using Microsoft.Data.Sqlite;
 using Server.Options;
 using Server.Logging;
+using Server.Hosting;
 using Microsoft.Extensions.Logging.Console;
 
 namespace Server
@@ -19,11 +20,25 @@ namespace Server
     {
         public static void Main(string[] args)
         {
-            var builder = WebApplication.CreateBuilder(args);
+            // appsettings.json next to the executable is the only configuration file, wherever the
+            // server is started from (double click, service, terminal in another folder).
+            var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+            {
+                Args = args,
+                ContentRootPath = AppContext.BaseDirectory
+            });
+
+            ServerText.Configure(builder.Configuration["Language"]);
+            ServerSettings settings = ServerSettings.Load(builder.Configuration);
+            settings.Apply(builder.Configuration);
+            if (settings.UsesConfiguredEndpoints)
+                builder.WebHost.ConfigureKestrel(settings.ConfigureKestrel);
 
             builder.Logging.AddConsole(options => options.FormatterName = CompactConsoleFormatter.FormatterName)
                 .AddConsoleFormatter<CompactConsoleFormatter, ConsoleFormatterOptions>();
             builder.Logging.AddFilter<ConsoleLoggerProvider>("Microsoft", LogLevel.Warning);
+            if (settings.LogToFile)
+                builder.Logging.AddProvider(new FileLoggerProvider(settings.LogDirectory, settings.LogRetentionDays));
 
             // Services in the container:
             builder.Services.AddDbContext<AppDbContext>(options =>
@@ -69,7 +84,7 @@ namespace Server
                         partitionKey,
                         _ => new FixedWindowRateLimiterOptions
                         {
-                            PermitLimit = 5, // accepts 5 login attempts per minute per IP address
+                            PermitLimit = settings.LoginAttemptsPerMinute, // login attempts per minute per IP address
                             Window = TimeSpan.FromMinutes(1),
                             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                             QueueLimit = 0
@@ -79,7 +94,7 @@ namespace Server
                 options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
                 options.AddPolicy("UsernameLookupLimit", context => RateLimitPartition.GetFixedWindowLimiter(
                     context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                    _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+                    _ => new FixedWindowRateLimiterOptions { PermitLimit = settings.UsernameChecksPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
             });
 
             // --------------- Jwt configuration ------------------
@@ -131,12 +146,17 @@ namespace Server
             }
 
             // Configure the HTTP request pipeline.
+            // First: one log line for every request, also those refused or not found further on.
+            app.UseMiddleware<RequestLogMiddleware>(settings.ShowInboxPolling);
+
             if (app.Environment.IsDevelopment())
             {
                 app.MapOpenApi();
             }
 
-            app.UseHttpsRedirection();
+            // Only when this server has its own HTTPS endpoint (on Azure TLS is handled in front of it).
+            if (settings.UsesConfiguredEndpoints && settings.HttpsPort > 0)
+                app.UseHttpsRedirection();
             app.UseRateLimiter();
 
             app.UseAuthentication();
@@ -144,8 +164,9 @@ namespace Server
 
             app.MapControllers();
 
+            string configurationFile = Path.Combine(app.Environment.ContentRootPath, "appsettings.json");
             app.Lifetime.ApplicationStarted.Register(() =>
-                ServerConsole.ShowBanner(app.Urls, app.Environment.EnvironmentName));
+                ServerConsole.ShowBanner(app.Urls, settings, configurationFile));
 
             app.Run();
         }

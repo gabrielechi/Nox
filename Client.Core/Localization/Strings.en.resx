@@ -198,6 +198,10 @@ Full fingerprint: {1}</value></data>
   <data name="RememberServer" xml:space="preserve"><value>Remember server</value></data>
   <data name="Username" xml:space="preserve"><value>Username</value></data>
   <data name="Password" xml:space="preserve"><value>Password</value></data>
+  <data name="ConfirmPassword" xml:space="preserve"><value>Repeat password</value></data>
+  <data name="ShowPassword" xml:space="preserve"><value>Show password</value></data>
+  <data name="RepeatThePasswordToConfirmIt" xml:space="preserve"><value>Repeat the password to confirm it.</value></data>
+  <data name="PasswordsDoNotMatch" xml:space="preserve"><value>The two passwords do not match.</value></data>
   <data name="Language" xml:space="preserve"><value>Language</value></data>
   <data name="SendFiles" xml:space="preserve"><value>Send files</value></data>
   <data name="Recipient" xml:space="preserve"><value>Recipient</value></data>

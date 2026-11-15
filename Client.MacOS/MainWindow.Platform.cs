@@ -110,6 +110,8 @@ namespace Client.MacOS
             InitializeUpdateCheck();
             TrustedRecipientsButton.IsEnabled = false;
             ShowAuthWindow();
+            // The screen is known only once the window is open: apply its height limit again.
+            Opened += (_, _) => { if (AuthScreen.IsVisible) ShowAuthWindow(); };
         }
 
         // ---------------- resources and text ----------------
@@ -140,6 +142,9 @@ namespace Client.MacOS
         {
             SizeToContent = SizeToContent.Height;
             Width = AuthDesignWidth;
+            // Never taller than the usable screen (menu bar and Dock excluded): the card scrolls instead.
+            Avalonia.Platform.Screen? screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+            MaxHeight = screen is null ? double.PositiveInfinity : Math.Max(400, screen.WorkingArea.Height / screen.Scaling - 24);
             Background = new LinearGradientBrush
             {
                 StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
@@ -151,6 +156,7 @@ namespace Client.MacOS
         private void ApplyScaledWindowSize(double designWidth, double designHeight)
         {
             SizeToContent = SizeToContent.Manual;
+            MaxHeight = double.PositiveInfinity;
             Width = designWidth;
             Height = designHeight;
             Background = Res("NoxWindowBrush");
@@ -607,7 +613,7 @@ namespace Client.MacOS
 
             AuthErrorTextBlock.Text = string.Empty;
             AuthErrorTextBlock.Foreground = Brushes.IndianRed;
-            PasswordBox.Text = string.Empty;
+            ClearPasswordFields();
             ResetServerConnectionState();
 
             MainShell.IsVisible = false;

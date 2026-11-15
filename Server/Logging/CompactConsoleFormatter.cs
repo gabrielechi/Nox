@@ -18,8 +18,8 @@ public sealed class CompactConsoleFormatter : ConsoleFormatter
 
         string level = logEntry.LogLevel switch
         {
-            LogLevel.Warning => "[Avviso] ",
-            LogLevel.Error or LogLevel.Critical => "[Errore] ",
+            LogLevel.Warning => ServerText.L("[Warning] ", "[Avviso] "),
+            LogLevel.Error or LogLevel.Critical => ServerText.L("[Error] ", "[Errore] "),
             _ => string.Empty
         };
         string detail = logEntry.Exception is null

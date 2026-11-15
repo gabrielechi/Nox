@@ -208,6 +208,8 @@ namespace Client.MacOS
                 SwitchAuthModeButton.IsEnabled = !busy;
             ServerUrlTextBox.IsReadOnly = UsernameTextBox.IsReadOnly = busy;
             PasswordBox.IsEnabled = !busy && _usernameExists.HasValue;
+            ConfirmPasswordBox.IsEnabled = !busy && _usernameExists == false;
+            ShowPasswordCheckBox.IsEnabled = !busy;
             UpdateRegistrationHint();
         }
 
@@ -215,9 +217,11 @@ namespace Client.MacOS
         {
             if (_usernameExists != exists) PrepareAuthTransition();
             _usernameExists = exists;
-            PasswordBox.Text = string.Empty;
-            PasswordLabelTextBlock.IsVisible = PasswordBox.IsVisible = exists.HasValue;
+            ClearPasswordFields();
+            PasswordLabelTextBlock.IsVisible = PasswordBox.IsVisible = ShowPasswordCheckBox.IsVisible = exists.HasValue;
+            ConfirmPasswordLabelTextBlock.IsVisible = ConfirmPasswordBox.IsVisible = exists == false;
             PasswordBox.IsEnabled = exists.HasValue;
+            ConfirmPasswordBox.IsEnabled = exists == false;
             SignInButton.IsVisible = exists != false;
             CreateAccountButton.IsVisible = exists == false;
             CreateAccountButton.IsDefault = exists == false;
@@ -258,10 +262,18 @@ namespace Client.MacOS
                 return;
             }
 
-            string missing = MissingPasswordRequirements((PasswordBox.Text ?? string.Empty));
-            bool valid = missing.Length == 0;
-            RegistrationPasswordHint.Text = valid ? Texts.T("PasswordMeetsTheRequirements") : Texts.T("StillNeeded", missing);
+            string password = PasswordBox.Text ?? string.Empty;
+            string confirmation = ConfirmPasswordBox?.Text ?? string.Empty;
+            string missing = MissingPasswordRequirements(password);
+            bool mismatch = confirmation.Length > 0 && confirmation != password;
+            bool valid = missing.Length == 0 && confirmation == password;
+            // First the requirements, then the second password: one message at a time.
+            RegistrationPasswordHint.Text = missing.Length > 0 ? Texts.T("StillNeeded", missing)
+                : mismatch ? Texts.T("PasswordsDoNotMatch")
+                : !valid ? Texts.T("RepeatThePasswordToConfirmIt")
+                : Texts.T("PasswordMeetsTheRequirements");
             RegistrationPasswordHint.Foreground = valid ? Brushes.LightGreen
+                : missing.Length == 0 && mismatch ? Brushes.IndianRed
                 : Res("TextMutedBrush");
             RegistrationPasswordHint.IsVisible = true;
             CreateAccountButton.IsEnabled = valid && ServerSchemeBox.IsEnabled;
@@ -341,6 +353,17 @@ namespace Client.MacOS
 
         private void UsernameTextBox_Changed(object sender, TextChangedEventArgs e)
         {
+            // Usernames cannot contain spaces: they are dropped as soon as they are typed or pasted.
+            // Setting Text raises this handler again with the cleaned value.
+            if (sender is TextBox box && (box.Text ?? string.Empty).Any(char.IsWhiteSpace))
+            {
+                string text = box.Text ?? string.Empty;
+                int caret = box.CaretIndex - text[..Math.Min(box.CaretIndex, text.Length)].Count(char.IsWhiteSpace);
+                box.Text = new string(text.Where(character => !char.IsWhiteSpace(character)).ToArray());
+                box.CaretIndex = Math.Clamp(caret, 0, box.Text.Length);
+                return;
+            }
+
             if (!_isServerConnectionVerified) return;
             if (_usernameExists != false) SetUsernameChoice(null);
             else QueuePasswordStrength();
@@ -430,7 +453,7 @@ namespace Client.MacOS
                 return;
             }
 
-            if (MissingPasswordRequirements(password).Length != 0)
+            if (MissingPasswordRequirements(password).Length != 0 || (ConfirmPasswordBox.Text ?? string.Empty) != password)
             {
                 UpdateRegistrationHint();
                 return;
@@ -1041,6 +1064,7 @@ namespace Client.MacOS
         {
             SelectedFilesStatusTextBlock.Foreground = Brushes.IndianRed;
             var pendingEncryptedFiles = new List<PendingEncryptedFile>();
+            ProgressTicker? sendTicker = null;
 
             if (_session is null)
             {
@@ -1086,9 +1110,19 @@ namespace Client.MacOS
                 if (_currentRecipientBundle is not { } verifiedBundle || !IsCurrentRecipientTrustedForSend())
                     throw new InvalidOperationException(Texts.T("CheckAndVerifyTheRecipientFirst"));
                 SelectedFilesStatusTextBlock.Text = Texts.T("DerivingTheX3DHSecret");
-                int totalSendSteps = (_selectedFilePaths.Count * 2) + 1;
-                int completedSendSteps = 0;
-                ShowProgress(SendProgressBar, totalSendSteps);
+                // Progress by bytes (encryption + upload), so the bar keeps moving on large files.
+                long plaintextTotal = _selectedFilePaths.Sum(path => new FileInfo(path).Length);
+                long ciphertextTotal = _selectedFilePaths.Sum(path => TransferProgress.CiphertextLength(new FileInfo(path).Length));
+                var sendProgress = new TransferProgress(plaintextTotal + ciphertextTotal);
+                var uploadProgress = new TransferProgress(ciphertextTotal);
+                string sendPhase = SelectedFilesStatusTextBlock.Text ?? string.Empty;
+                bool showUploadedBytes = false;
+                ShowProgress(SendProgressBar, 1000);
+                sendTicker = new ProgressTicker(() =>
+                {
+                    UpdateProgress(SendProgressBar, sendProgress.Permille);
+                    SelectedFilesStatusTextBlock.Text = WithProgress(sendPhase, sendProgress,showUploadedBytes ? uploadProgress : null);
+                });
 
                 X3dhPreKeyBundle recipientBundle = ToX3dhPreKeyBundle(verifiedBundle);
 
@@ -1110,7 +1144,7 @@ namespace Client.MacOS
                     string filePath = _selectedFilePaths[fileIndex];
                     var fileInfo = new FileInfo(filePath);
 
-                    SelectedFilesStatusTextBlock.Text = Texts.T("EncryptingAlt", fileInfo.Name);
+                    sendPhase = Texts.T("EncryptingAlt", fileInfo.Name);
 
                     FileDerivedKeys fileKeys = _fileKeyDerivationService.DeriveFileKeys(
                         x3dhResult.RootKey,
@@ -1140,10 +1174,11 @@ namespace Client.MacOS
                         bufferSize: 1024 * 64,
                         useAsync: true))
                     {
-                        await _fileContentEncryptionService.EncryptAsync(
-                            plaintextStream,
+                        var countedPlaintext = new ProgressReadStream(plaintextStream, sendProgress);
+                        await Task.Run(() => _fileContentEncryptionService.EncryptAsync(
+                            countedPlaintext,
                             encryptedStream,
-                            fileKeys.FileKey);
+                            fileKeys.FileKey));
                     }
 
                     long ciphertextLength = new FileInfo(tempEncryptedFilePath).Length;
@@ -1156,11 +1191,9 @@ namespace Client.MacOS
                         CiphertextLength = ciphertextLength
                     });
 
-                    completedSendSteps++;
-                    UpdateProgress(SendProgressBar, completedSendSteps);
                 }
 
-                SelectedFilesStatusTextBlock.Text = Texts.T("StartingTransfer");
+                sendPhase = Texts.T("StartingTransfer");
 
                 if (!ReferenceEquals(verifiedBundle, _currentRecipientBundle) || !IsCurrentRecipientTrustedForSend())
                     throw new InvalidOperationException(Texts.T("CheckAndVerifyTheRecipientFirst"));
@@ -1181,15 +1214,14 @@ namespace Client.MacOS
                 CreateTransferResponse createTransferResponse = await _apiClient.CreateTransferAsync(
                     createTransferRequest);
 
-                completedSendSteps++;
-                UpdateProgress(SendProgressBar, completedSendSteps);
 
                 foreach (PendingEncryptedFile encryptedFile in pendingEncryptedFiles)
                 {
                     CreateTransferFileResponse serverFile = createTransferResponse.Files
                         .Single(file => file.FileIndex == encryptedFile.FileIndex);
 
-                    SelectedFilesStatusTextBlock.Text = Texts.T("UploadingFile", encryptedFile.FileIndex + 1, pendingEncryptedFiles.Count);
+                    sendPhase = Texts.T("UploadingFile", encryptedFile.FileIndex + 1, pendingEncryptedFiles.Count);
+                    showUploadedBytes = true;
 
                     await using var encryptedFileStream = new FileStream(
                         encryptedFile.TempEncryptedFilePath,
@@ -1202,13 +1234,13 @@ namespace Client.MacOS
                     await _apiClient.UploadTransferFileContentAsync(
                         createTransferResponse.TransferId,
                         serverFile.FileId,
-                        encryptedFileStream,
+                        new ProgressReadStream(encryptedFileStream, sendProgress, uploadProgress),
                         encryptedFile.CiphertextLength);
 
-                    completedSendSteps++;
-                    UpdateProgress(SendProgressBar, completedSendSteps);
                 }
 
+                sendTicker.Dispose();
+                UpdateProgress(SendProgressBar, 1000);
                 SelectedFilesStatusTextBlock.Text =
                     Texts.T("SentExpires", TransferExpiryFormatter.Format(createTransferResponse.ExpiresAtUtc));
 
@@ -1219,15 +1251,16 @@ namespace Client.MacOS
                 DropZonePromptTextBlock.Text = DropZoneBorder.IsEnabled
                     ? DropZoneReadyText
                     : DropZoneDisabledText;
-                UpdateProgress(SendProgressBar, totalSendSteps);
             }
             catch (Exception ex)
             {
+                sendTicker?.Dispose();
                 SelectedFilesStatusTextBlock.Foreground = Brushes.IndianRed;
                 SelectedFilesStatusTextBlock.Text = GetUserFacingError(ex);
             }
             finally
             {
+                sendTicker?.Dispose();
                 foreach (PendingEncryptedFile pendingFile in pendingEncryptedFiles)
                 {
                     if (File.Exists(pendingFile.TempEncryptedFilePath))
@@ -1296,6 +1329,7 @@ namespace Client.MacOS
 
             TransferSummaryResponse selectedTransfer = _inboxTransfers[InboxListBox.SelectedIndex];
             ClientOneTimePreKeyState? transferOneTimePreKey = null;
+            ProgressTicker? downloadTicker = null;
             _isDownloading = true;
             ++_inboxRevision;
             RefreshInboxButton.IsEnabled = false;
@@ -1335,10 +1369,15 @@ namespace Client.MacOS
                 TransferDetailResponse transferDetail = await _apiClient.GetTransferDetailAsync(
                     selectedTransfer.TransferId);
 
-                int totalInboxSteps = (transferDetail.Files.Count * 2) + 2;
-                int completedInboxSteps = 1;
-                ShowProgress(InboxProgressBar, totalInboxSteps);
-                UpdateProgress(InboxProgressBar, completedInboxSteps);
+                // Progress by bytes received (each file is decrypted while it downloads).
+                var downloadProgress = new TransferProgress(transferDetail.Files.Sum(file => file.CiphertextLength));
+                string downloadPhase = InboxStatusTextBlock.Text ?? string.Empty;
+                ShowProgress(InboxProgressBar, 1000);
+                downloadTicker = new ProgressTicker(() =>
+                {
+                    UpdateProgress(InboxProgressBar, downloadProgress.Permille);
+                    InboxStatusTextBlock.Text = WithProgress(downloadPhase, downloadProgress, downloadProgress);
+                });
 
                 X3dhMessageHeader x3dhHeader = _x3dhHeaderSerializer.Deserialize(
                     transferDetail.X3dhHeader);
@@ -1386,7 +1425,7 @@ namespace Client.MacOS
                 {
                     foreach (TransferFileResponse file in transferDetail.Files.OrderBy(file => file.FileIndex))
                     {
-                        InboxStatusTextBlock.Text = Texts.T("DownloadingFile", file.FileIndex + 1, transferDetail.Files.Count);
+                        downloadPhase = Texts.T("DownloadingFile", file.FileIndex + 1, transferDetail.Files.Count);
 
                         FileDerivedKeys fileKeys = _fileKeyDerivationService.DeriveFileKeys(
                             recipientSecret.RootKey,
@@ -1412,14 +1451,12 @@ namespace Client.MacOS
                         await _apiClient.ProcessTransferFileContentAsync(
                             transferDetail.TransferId,
                             file.FileId,
-                            (source, token) => fileDownload.DecryptToStagingFileAsync(
-                                source, tempPlaintextFilePath, fileKeys.FileKey,
-                                metadata.PlaintextLength, token));
+                            (source, token) => Task.Run(() => fileDownload.DecryptToStagingFileAsync(
+                                new ProgressReadStream(source, downloadProgress), tempPlaintextFilePath, fileKeys.FileKey,
+                                metadata.PlaintextLength, token), token));
 
                         stagedFiles.Add((tempPlaintextFilePath, outputPath));
 
-                        completedInboxSteps += 2;
-                        UpdateProgress(InboxProgressBar, completedInboxSteps);
                     }
 
                     foreach ((string stagedPath, string outputPath) in stagedFiles)
@@ -1433,6 +1470,9 @@ namespace Client.MacOS
                         Directory.Delete(stagingDirectory, recursive: true);
                 }
 
+                downloadTicker.Dispose();
+                UpdateProgress(InboxProgressBar, 1000);
+
                 // Keep the decryption key if the server cannot acknowledge a long download.
                 await _apiClient.MarkTransferDownloadedAsync(transferDetail.TransferId);
 
@@ -1444,15 +1484,13 @@ namespace Client.MacOS
                     await SaveVaultAsync(_sessionPassword);
                 }
 
-                completedInboxSteps++;
-                UpdateProgress(InboxProgressBar, completedInboxSteps);
-
                 InboxStatusTextBlock.Text = Texts.T("FileDownloadedDecryptedAndRemovedFrom");
 
                 await RefreshInboxAsync(allowDuringDownload: true);
             }
             catch (System.Security.Cryptography.AuthenticationTagMismatchException)
             {
+                downloadTicker?.Dispose();
                 bool removedFromServer = false;
 
                 try
@@ -1485,11 +1523,13 @@ namespace Client.MacOS
             }
             catch (Exception ex)
             {
+                downloadTicker?.Dispose();
                 InboxStatusTextBlock.Foreground = Brushes.IndianRed;
                 InboxStatusTextBlock.Text = GetUserFacingError(ex);
             }
             finally
             {
+                downloadTicker?.Dispose();
                 _isDownloading = false;
                 RefreshInboxButton.IsEnabled = !_isManualInboxRefresh;
                 InboxListBox.IsEnabled = true;

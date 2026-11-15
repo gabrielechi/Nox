@@ -1,25 +1,31 @@
 #!/bin/bash
 # Installs (or updates) NOX on a Mac with Apple Silicon, straight from the Terminal:
 #
-#     curl -fsSL https://github.com/gabrielechi/Nox/releases/latest/download/install-nox.sh | bash
+#     curl -fsSL https://raw.githubusercontent.com/gabrielechi/Nox/main/install-nox.sh | bash
 #
 # Uninstall:
 #
-#     curl -fsSL https://github.com/gabrielechi/Nox/releases/latest/download/install-nox.sh | bash -s -- --uninstall
+#     curl -fsSL https://raw.githubusercontent.com/gabrielechi/Nox/main/install-nox.sh | bash -s -- --uninstall
 #
 # Files downloaded with curl are not marked with com.apple.quarantine, so Gatekeeper does not
-# block the ad hoc signed app. The script downloads NOX-macOS-arm64.zip and its .sha256 from
-# BASE_URL, checks the hash, copies NOX.app into /Applications (or ~/Applications when
-# /Applications is not writable) and opens it. Settings in ~/Library/Application Support/NOX
-# are never touched.
+# block the ad hoc signed app. The script asks the GitHub API for the newest published release of
+# gabrielechi/Nox that carries NOX-macOS-arm64.zip (releases with only the Windows setup are
+# skipped), downloads that zip, checks it against the SHA-256 digest published by GitHub, copies
+# NOX.app into /Applications (or ~/Applications when /Applications is not writable) and opens it.
+# Settings in ~/Library/Application Support/NOX are never touched.
+#
+# The script itself lives in the root of the main branch of gabrielechi/Nox (the command above),
+# so it does not depend on which release is marked "Latest". A copy is also attached to each Mac
+# release, because NOX downloads it from there when it updates itself.
 #
 # NOX itself runs this script to update (MainWindow.Updates.cs): it has already downloaded and
 # verified the zip, passes it with NOX_ZIP_FILE/NOX_ZIP_SHA256, installs over its own bundle
 # (NOX_INSTALL_DIR) and quits; the script waits for that process (NOX_WAIT_PID) to end first.
 #
 # Options (environment variables):
-#   NOX_BASE_URL         overrides BASE_URL below (e.g. for a test server)
-#   NOX_SKIP_CHECKSUM=1  installs even without a .sha256 file (not recommended)
+#   NOX_BASE_URL         downloads NOX-macOS-arm64.zip and its .sha256 from this HTTPS folder
+#                        instead of the GitHub releases (e.g. a test server)
+#   NOX_SKIP_CHECKSUM=1  with NOX_BASE_URL, installs even without a .sha256 file (not recommended)
 #   NOX_NO_OPEN=1        does not open NOX at the end
 #   NOX_INSTALL_DIR      installs into this folder instead of /Applications
 #   NOX_ZIP_FILE         installs this local zip instead of downloading it (needs NOX_ZIP_SHA256)
@@ -35,8 +41,9 @@ main() {
     set -euo pipefail
     export PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
-    # Public folder that holds NOX-macOS-arm64.zip and NOX-macOS-arm64.zip.sha256.
-    local BASE_URL="${NOX_BASE_URL:-https://github.com/gabrielechi/Nox/releases/latest/download}"
+    local REPO="gabrielechi/Nox"
+    local RELEASES_API="https://api.github.com/repos/$REPO/releases?per_page=30"
+    local DOWNLOAD_PREFIX="https://github.com/$REPO/releases/download/"
 
     local ASSET="NOX-macOS-arm64.zip"
     local APP_NAME="NOX.app"
@@ -109,12 +116,13 @@ main() {
         actual="$(shasum -a 256 "$ZIP" | awk '{print $1}')"
         [ "$expected" = "$actual" ] || die "lo SHA-256 del file di aggiornamento non corrisponde. Aggiornamento annullato."
         say "SHA-256 verificato."
-    else
+    elif [ -n "${NOX_BASE_URL:-}" ]; then
+        # Test server: a plain HTTPS folder with the zip and its .sha256.
+        local BASE_URL="${NOX_BASE_URL%/}"
         case "$BASE_URL" in
             https://*) ;;
             *) die "l'indirizzo di download deve essere HTTPS: $BASE_URL" ;;
         esac
-        BASE_URL="${BASE_URL%/}"
         ZIP="$TMP/$ASSET"
 
         say "Scarico NOX..."
@@ -132,6 +140,64 @@ main() {
         else
             die "manca $BASE_URL/$ASSET.sha256: non posso verificare il download."
         fi
+    else
+        # GitHub: newest published release (not draft, not pre-release) that carries the Mac zip.
+        say "Cerco l'ultima versione per Mac..."
+        curl -fsSL --proto '=https' --tlsv1.2 -H 'Accept: application/vnd.github+json' \
+            -A 'NOX-Install-Script' -o "$TMP/releases.json" "$RELEASES_API" \
+            || die "impossibile contattare GitHub ($RELEASES_API)."
+
+        # The JSON is read with JavaScript for Automation (osascript), present on every macOS.
+        # Output: tag, zip URL, SHA-256 digest published by GitHub, URL of the .sha256 asset (one per line).
+        local found TAG URL DIGEST SUM_URL
+        found="$(osascript -l JavaScript -e '
+function run(argv) {
+    ObjC.import("Foundation");
+    var text = $.NSString.stringWithContentsOfFileEncodingError(argv[0], $.NSUTF8StringEncoding, null);
+    var releases = JSON.parse(ObjC.unwrap(text));
+    var asset = argv[1], prefix = argv[2];
+    for (var i = 0; i < releases.length; i++) {
+        var release = releases[i];
+        if (release.draft || release.prerelease) continue;
+        var zip = null, sum = null;
+        (release.assets || []).forEach(function (a) {
+            var url = a.browser_download_url;
+            if (typeof url !== "string" || url.indexOf(prefix) !== 0) return;
+            if (a.name === asset) zip = a;
+            if (a.name === asset + ".sha256") sum = a;
+        });
+        if (!zip) continue;
+        var digest = /^sha256:([0-9a-fA-F]{64})$/.exec(zip.digest || "");
+        return [release.tag_name, zip.browser_download_url,
+                digest ? digest[1].toLowerCase() : "", sum ? sum.browser_download_url : ""].join("\n");
+    }
+    return "";
+}' "$TMP/releases.json" "$ASSET" "$DOWNLOAD_PREFIX")" || die "risposta di GitHub non leggibile."
+        { IFS= read -r TAG; IFS= read -r URL; IFS= read -r DIGEST; IFS= read -r SUM_URL; } <<<"$found" || true
+        [ -n "${URL:-}" ] || die "nessuna release pubblicata di $REPO contiene $ASSET."
+        case "$URL" in
+            "$DOWNLOAD_PREFIX"*) ;;
+            *) die "indirizzo di download inatteso: $URL" ;;
+        esac
+
+        if [ -n "${DIGEST:-}" ]; then
+            expected="$DIGEST"
+        elif [ -n "${SUM_URL:-}" ]; then
+            curl -fsSL --proto '=https' --tlsv1.2 -o "$TMP/$ASSET.sha256" "$SUM_URL" \
+                || die "download non riuscito di $ASSET.sha256."
+            expected="$(awk '{print tolower($1); exit}' "$TMP/$ASSET.sha256")"
+        else
+            die "la release $TAG non pubblica lo SHA-256 di $ASSET: installazione annullata."
+        fi
+        [ "${#expected}" = 64 ] || die "SHA-256 atteso non valido per la release $TAG."
+
+        ZIP="$TMP/$ASSET"
+        say "Scarico NOX $TAG..."
+        curl -fL --proto '=https' --tlsv1.2 --progress-bar -o "$ZIP" "$URL" \
+            || die "download non riuscito da $URL"
+        actual="$(shasum -a 256 "$ZIP" | awk '{print $1}')"
+        [ "$expected" = "$actual" ] || die "lo SHA-256 dello zip non corrisponde: file corrotto o manomesso. Installazione annullata."
+        say "SHA-256 verificato."
     fi
 
     say "Estraggo..."

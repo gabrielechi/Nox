@@ -9,7 +9,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Client.MacOS</RootNamespace>
     <AssemblyName>NOX</AssemblyName>
-    <Version>3.3</Version>
+    <Version>3.5</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Product>NOX</Product>
     <ApplicationIcon>..\Client.Windows\Assets\NoxWindows.ico</ApplicationIcon>
